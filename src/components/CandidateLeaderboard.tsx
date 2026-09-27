@@ -48,18 +48,18 @@ export const CandidateLeaderboard: React.FC<CandidateLeaderboardProps> = ({
   };
 
   return (
-    <section className="py-6 sm:py-8">
+    <section className="pb-6 sm:pb-8">
       {/* Header and Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
             <span>Probabilidades em Tempo Real</span>
             <span className="text-xs px-2 py-0.5 rounded font-mono font-normal bg-neutral-800 text-neutral-300">
-              {markets.length} candidatos listados
+              {markets.length} candidatos oficiais
             </span>
           </h2>
           <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
-            Porcentagem implícita calculada diretamente a partir do preço das cotas de liquidação TSE ($0,00 a $1,00 USD).
+            Chances de vitória estimadas pelo mercado financeiro da Polymarket (cotas de $0,00 a $1,00 USD). <strong>Não é contagem de votos da urna nem pesquisa eleitoral</strong>.
           </p>
         </div>
 
@@ -181,6 +181,9 @@ export const CandidateLeaderboard: React.FC<CandidateLeaderboardProps> = ({
               {/* Middle row: Big Percentage & Implied Multiplier */}
               <div className="flex items-baseline justify-between mb-2">
                 <div>
+                  <span className="text-[10px] uppercase font-mono font-semibold tracking-wider text-neutral-400 block mb-0.5">
+                    Chance de Vitória
+                  </span>
                   <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight tabular-nums text-emerald-400">
                     {candidate.percentage > 0 ? `${candidate.percentage.toFixed(2)}%` : '< 0.05%'}
                   </div>

@@ -241,60 +241,57 @@ export default function App() {
 
         {/* Populated Content */}
         {electionData && (
-          <>
-            {/* Top Metric Hero */}
-            <ElectionHero
-              event={electionData.event}
-              markets={electionData.markets}
-              isDark={isDark}
-              onOpenRules={() => setIsRulesOpen(true)}
-              officeType={officeType}
-              stateName={currentStateName}
-            />
+          <div className="space-y-8">
+            {/* 1. Main Priority: Probabilidades em Tempo Real (Candidatos) */}
+            {(activeSection === 'overview') && (
+              <CandidateLeaderboard
+                markets={electionData.markets}
+                isDark={isDark}
+                onSelectCandidate={handleSelectCandidate}
+                selectedCandidateId={selectedChartCandidate?.id || null}
+              />
+            )}
 
-            {/* Dynamic View Sections */}
-            <div className="mt-8 space-y-8">
-              
-              {/* Section: Interactive Multi-Series Chart */}
-              {(activeSection === 'overview' || activeSection === 'charts') && (
-                <InteractiveChart
-                  markets={electionData.markets}
-                  isDark={isDark}
-                  selectedCandidate={selectedChartCandidate}
-                  onSelectCandidate={setSelectedChartCandidate}
-                />
-              )}
+            {/* 2. Cotação e Probabilidade: Métricas Gerais & Contrato TSE */}
+            {(activeSection === 'overview') && (
+              <ElectionHero
+                event={electionData.event}
+                markets={electionData.markets}
+                isDark={isDark}
+                onOpenRules={() => setIsRulesOpen(true)}
+                officeType={officeType}
+                stateName={currentStateName}
+              />
+            )}
 
-              {/* Section: Candidate Cards / Leaderboard */}
-              {(activeSection === 'overview') && (
-                <CandidateLeaderboard
-                  markets={electionData.markets}
-                  isDark={isDark}
-                  onSelectCandidate={handleSelectCandidate}
-                  selectedCandidateId={selectedChartCandidate?.id || null}
-                />
-              )}
+            {/* 3. Gráficos Históricos Interativos */}
+            {(activeSection === 'overview' || activeSection === 'charts') && (
+              <InteractiveChart
+                markets={electionData.markets}
+                isDark={isDark}
+                selectedCandidate={selectedChartCandidate}
+                onSelectCandidate={setSelectedChartCandidate}
+              />
+            )}
 
-              {/* Section: Detailed Fluctuation Table */}
-              {(activeSection === 'overview' || activeSection === 'history') && (
-                <FluctuationHistoryTable
-                  markets={electionData.markets}
-                  event={electionData.event}
-                  isDark={isDark}
-                  onSelectCandidate={handleSelectCandidate}
-                />
-              )}
+            {/* 4. Tabela Detalhada de Flutuações */}
+            {(activeSection === 'overview' || activeSection === 'history') && (
+              <FluctuationHistoryTable
+                markets={electionData.markets}
+                event={electionData.event}
+                isDark={isDark}
+                onSelectCandidate={handleSelectCandidate}
+              />
+            )}
 
-              {/* Section: Related Brazilian Politics Markets */}
-              {(activeSection === 'overview' || activeSection === 'related') && relatedEvents.length > 0 && (
-                <RelatedMarkets
-                  events={relatedEvents}
-                  isDark={isDark}
-                />
-              )}
-
-            </div>
-          </>
+            {/* 5. Mercados Relacionados da Política Brasileira */}
+            {(activeSection === 'overview' || activeSection === 'related') && relatedEvents.length > 0 && (
+              <RelatedMarkets
+                events={relatedEvents}
+                isDark={isDark}
+              />
+            )}
+          </div>
         )}
       </main>
 

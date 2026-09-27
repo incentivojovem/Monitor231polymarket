@@ -45,7 +45,7 @@ export const ElectionHero: React.FC<ElectionHeroProps> = ({
     : 'Cotação e Probabilidade Presidencial';
 
   return (
-    <div className={`relative overflow-hidden border-b ${
+    <div className={`relative overflow-hidden rounded-2xl border ${
       isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-neutral-50/80 border-neutral-200'
     }`}>
       {/* Background Image Scrim */}
@@ -54,7 +54,7 @@ export const ElectionHero: React.FC<ElectionHeroProps> = ({
         style={{ backgroundImage: `url('/src/assets/images/brasil_election_hero_1790527274804.jpg')` }}
       />
       
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      <div className="relative p-6 sm:p-8">
         
         {/* Upper Breadcrumb / Context */}
         <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500 mb-3 font-mono">

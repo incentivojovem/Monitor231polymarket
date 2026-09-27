@@ -65,6 +65,16 @@ export async function fetchElectionData(slug: string = 'brazil-presidential-elec
     const markets = [];
     for (const m of event.markets || []) {
       if (!m || !m.id || seenMarketIds.has(m.id)) continue;
+
+      // Filter out Polymarket placeholder slots (e.g. "Placeholder 1", "Person O") and inactive zero-volume dummy tokens
+      const candidateRaw = (m.groupItemTitle || m.question || '').trim();
+      const isPlaceholder = 
+        /placeholder(\s+\d+)?/i.test(candidateRaw) ||
+        /^person\s+[a-z]/i.test(candidateRaw) ||
+        (m.active === false && (!m.volume || parseFloat(m.volume) === 0) && /other/i.test(candidateRaw));
+
+      if (isPlaceholder) continue;
+
       seenMarketIds.add(m.id);
 
       let yesPrice = 0;
