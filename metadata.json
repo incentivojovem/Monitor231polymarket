@@ -1,0 +1,8 @@
+{
+  "name": "Monitor Eleitoral Brasil 2026 - Polymarket Odds",
+  "description": "Painel em tempo real de probabilidades e porcentagens de votos para a eleição presidencial do Brasil via dados oficiais da Polymarket, com gráficos de flutuações históricas e exportação CSV.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
