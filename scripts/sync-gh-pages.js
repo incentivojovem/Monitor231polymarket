@@ -34,10 +34,21 @@ const sourceHtmlPath = fs.existsSync(path.resolve(distDir, 'index.template.html'
   : path.resolve(distDir, 'index.html');
 
 if (fs.existsSync(sourceHtmlPath)) {
-  const distHtml = fs.readFileSync(sourceHtmlPath, 'utf-8');
+  let distHtml = fs.readFileSync(sourceHtmlPath, 'utf-8');
+  const buildVersion = Date.now().toString(36);
+  // Add cache buster query string to ensure GitHub Pages and browsers do not serve stale cache
+  distHtml = distHtml.replace(
+    'src="./assets/index.js"',
+    `src="./assets/index.js?v=${buildVersion}"`
+  );
+  distHtml = distHtml.replace(
+    'href="./assets/index.css"',
+    `href="./assets/index.css?v=${buildVersion}"`
+  );
+
   fs.writeFileSync(path.resolve(rootDir, 'index.html'), distHtml, 'utf-8');
   fs.writeFileSync(path.resolve(rootDir, '404.html'), distHtml, 'utf-8');
-  console.log('  ✓ Atualizado: index.html');
+  console.log(`  ✓ Atualizado: index.html (com cache-buster v=${buildVersion})`);
   console.log('  ✓ Criado: 404.html (Fallback para recarregamento de páginas no GitHub Pages)');
 }
 
