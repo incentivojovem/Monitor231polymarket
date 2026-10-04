@@ -95,6 +95,23 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Mercados
           </button>
+          <button
+            onClick={() => onSelectSection('tse_apuracao')}
+            className={`transition-all py-1 px-2.5 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1.5 font-semibold text-xs ${
+              activeSection === 'tse_apuracao'
+                ? 'bg-emerald-500 text-neutral-950 shadow-md shadow-emerald-500/20'
+                : (isDark
+                    ? 'bg-neutral-800/90 text-emerald-400 border border-emerald-500/30 hover:bg-neutral-800 hover:text-emerald-300'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100')
+            }`}
+            title="Apuração Oficial em Tempo Real de todos os cargos via API Aberta do TSE"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <span>Apuração TSE</span>
+            <span className="text-[10px] uppercase font-mono px-1 py-0.2 rounded bg-black/20">
+              Ao Vivo
+            </span>
+          </button>
         </nav>
 
         {/* Zone 3: Interactive Controls (Strict single line, shrink-0) */}
@@ -209,6 +226,16 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           Mercados
+        </button>
+        <button
+          onClick={() => onSelectSection('tse_apuracao')}
+          className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap shrink-0 font-semibold ${
+            activeSection === 'tse_apuracao'
+              ? 'bg-emerald-500 text-neutral-950 shadow-sm'
+              : (isDark ? 'text-emerald-400' : 'text-emerald-700')
+          }`}
+        >
+          Apuração TSE
         </button>
       </div>
     </header>

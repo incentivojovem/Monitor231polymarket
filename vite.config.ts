@@ -9,7 +9,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {
@@ -22,7 +22,7 @@ export default defineConfig(() => {
     build: {
       outDir: 'dist',
       rollupOptions: {
-        input: path.resolve(__dirname, 'index.template.html'),
+        input: path.resolve(import.meta.dirname, 'index.template.html'),
         output: {
           entryFileNames: 'assets/index.js',
           chunkFileNames: 'assets/[name].js',

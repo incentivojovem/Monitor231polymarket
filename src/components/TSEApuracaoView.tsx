@@ -1,0 +1,786 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  CargoCodigo,
+  EleicaoAno,
+  TSEResultData,
+} from '../types/tse';
+import {
+  ELEICOES_DISPONIVEIS,
+  CARGOS_TSE,
+  ESTADOS_BRASIL,
+  fetchTSEApuracao,
+  exportTSEBoletimCSV,
+} from '../services/tseService';
+import {
+  RefreshCw,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  Clock,
+  Layers,
+  MapPin,
+  Vote,
+  ExternalLink,
+  Calendar,
+  ShieldCheck,
+  Radio,
+} from 'lucide-react';
+
+interface TSEApuracaoViewProps {
+  isDark: boolean;
+  onShowToast: (msg: string) => void;
+}
+
+export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
+  isDark,
+  onShowToast,
+}) => {
+  // Filtro de Eleição: 2026 (Atual), 2024 (Municipais Reais), 2022 (Gerais Reais)
+  const [selectedAno, setSelectedAno] = useState<EleicaoAno>('2026');
+  const [selectedTurno, setSelectedTurno] = useState<'1' | '2'>('1');
+
+  // Cargo e UF selecionados
+  const [selectedCargo, setSelectedCargo] = useState<CargoCodigo>('1');
+  const [selectedUf, setSelectedUf] = useState<string>('BR');
+
+  // Dados da apuração
+  const [dados, setDados] = useState<TSEResultData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
+  const [refreshInterval, setRefreshInterval] = useState<number>(20); // 15s, 20s, 30s, 60s
+  const [countdown, setCountdown] = useState<number>(20);
+  const [lastCheckTime, setLastCheckTime] = useState<Date>(new Date());
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Ajusta cargos válidos conforme o ano escolhido
+  const cargosValidos = useMemo(() => {
+    return CARGOS_TSE.filter((c) => c.anosDisponiveis.includes(selectedAno));
+  }, [selectedAno]);
+
+  // Se trocar de ano e o cargo atual não for válido para aquele ano, reseta para o primeiro cargo válido
+  useEffect(() => {
+    const isCargoValido = cargosValidos.some((c) => c.codigo === selectedCargo);
+    if (!isCargoValido && cargosValidos.length > 0) {
+      const novoCargo = cargosValidos[0].codigo;
+      setSelectedCargo(novoCargo);
+      if (novoCargo === '1') {
+        setSelectedUf('BR');
+      } else if (novoCargo === '11' || novoCargo === '13') {
+        setSelectedUf('SP');
+      }
+    }
+  }, [selectedAno, cargosValidos, selectedCargo]);
+
+  // Carrega apuração do TSE
+  const carregarApuracao = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsRefreshing(true);
+      try {
+        const resultado = await fetchTSEApuracao(selectedAno, selectedCargo, selectedUf, selectedTurno);
+        setDados(resultado);
+        setLastCheckTime(new Date());
+      } catch (err) {
+        console.error('Erro ao carregar apuração TSE:', err);
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [selectedAno, selectedCargo, selectedUf, selectedTurno]
+  );
+
+  useEffect(() => {
+    carregarApuracao();
+    setCountdown(refreshInterval);
+  }, [carregarApuracao, refreshInterval]);
+
+  // Temporizador de contagem regressiva e auto-refresh (polling inteligente)
+  useEffect(() => {
+    if (!isAutoRefresh || selectedAno !== '2026') return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          carregarApuracao(true);
+          return refreshInterval;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAutoRefresh, selectedAno, refreshInterval, carregarApuracao]);
+
+  // Troca de cargo
+  const handleSelectCargo = (cargo: CargoCodigo) => {
+    setSelectedCargo(cargo);
+    if (cargo === '1') {
+      setSelectedUf('BR');
+    } else if (selectedUf === 'BR') {
+      setSelectedUf('SP');
+    }
+  };
+
+  // Candidatos filtrados por busca
+  const candidatosFiltrados = useMemo(() => {
+    if (!dados || !dados.candidatos) return [];
+    if (!searchQuery.trim()) return dados.candidatos;
+    const q = searchQuery.toLowerCase();
+    return dados.candidatos.filter(
+      (c) =>
+        c.nm.toLowerCase().includes(q) ||
+        (c.nmCompleto && c.nmCompleto.toLowerCase().includes(q)) ||
+        c.n.includes(q) ||
+        c.cc.toLowerCase().includes(q)
+    );
+  }, [dados, searchQuery]);
+
+  // Cargo atual
+  const cargoInfo = useMemo(() => {
+    return CARGOS_TSE.find((c) => c.codigo === selectedCargo) || CARGOS_TSE[0];
+  }, [selectedCargo]);
+
+  // Exportar CSV
+  const handleExportCSV = () => {
+    if (!dados) return;
+    exportTSEBoletimCSV(dados);
+    onShowToast(`Boletim Oficial TSE de ${dados.cargoNome} (${dados.cdabr} - ${dados.ano}) baixado!`);
+  };
+
+  return (
+    <div className="space-y-8 animate-fadeIn">
+      {/* 1. Header do Painel com Seletor de Eleição Real */}
+      <div
+        className={`p-4 sm:p-6 rounded-2xl border transition-all ${
+          isDark
+            ? 'bg-neutral-900/90 border-neutral-800 shadow-xl'
+            : 'bg-white border-neutral-200 shadow-sm'
+        }`}
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Dados Oficiais Auditados pelo TSE
+              </span>
+
+              {selectedAno === '2026' ? (
+                <span className="text-xs px-2.5 py-0.5 rounded font-mono font-bold bg-amber-950/80 text-amber-300 border border-amber-800 flex items-center gap-1.5">
+                  <Radio className="w-3 h-3 text-amber-400 animate-pulse" />
+                  2026: Aguardando Apuração das Urnas
+                </span>
+              ) : (
+                <span className="text-xs px-2.5 py-0.5 rounded font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  {selectedAno}: Totalização 100% Real Concluída
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+              Apuração Oficial de Votos do Brasil
+            </h1>
+            <p className={`text-xs sm:text-sm mt-1 max-w-3xl ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
+              Consulte a totalização real emitida pela Justiça Eleitoral. Você pode navegar pelos resultados históricos auditados das eleições anteriores (2022 e 2024) ou acompanhar o feed ao vivo de 2026.
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {selectedAno === '2026' && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setIsAutoRefresh(!isAutoRefresh)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors flex items-center gap-1.5 border ${
+                    isAutoRefresh
+                      ? isDark ? 'bg-emerald-950/70 text-emerald-400 border-emerald-800/80' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : isDark ? 'bg-neutral-800 text-neutral-400 border-neutral-700' : 'bg-neutral-100 text-neutral-600 border-neutral-200'
+                  }`}
+                  title={isAutoRefresh ? 'Monitoramento em tempo real ativo. Clique para pausar.' : 'Clique para retomar o monitoramento automático.'}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isAutoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
+                  <span>{isAutoRefresh ? `AO VIVO (${countdown}s)` : 'PAUSADO'}</span>
+                </button>
+
+                {isAutoRefresh && (
+                  <select
+                    value={refreshInterval}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setRefreshInterval(val);
+                      setCountdown(val);
+                    }}
+                    className={`text-xs font-mono font-semibold rounded-lg px-2 py-1.5 border outline-none cursor-pointer ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-neutral-300' : 'bg-white border-neutral-300 text-neutral-800'
+                    }`}
+                    title="Definir intervalo de verificação na API do TSE"
+                  >
+                    <option value={15}>15s (TSE)</option>
+                    <option value={20}>20s</option>
+                    <option value={30}>30s</option>
+                    <option value={60}>60s</option>
+                  </select>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => carregarApuracao()}
+              disabled={isRefreshing}
+              className={`p-2 rounded-lg transition-colors border ${
+                isDark ? 'bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 border-neutral-700' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border-neutral-200'
+              }`}
+              title="Recarregar dados do TSE imediatamente"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleExportCSV}
+              disabled={!dados}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
+              title="Baixar Boletim Oficial de Totalização em CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar Boletim</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Seletores Principais: Ano da Eleição, Turno, Cargo e UF */}
+        <div className="mt-6 pt-5 border-t border-neutral-800/60 space-y-4">
+          
+          {/* Seletor do Ano da Eleição (Filtro Solicitado) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs uppercase font-mono font-semibold tracking-wider text-neutral-400 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              Escolha a Eleição (Dados Reais Disponíveis):
+            </span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {ELEICOES_DISPONIVEIS.map((eleicao) => {
+                const isSelected = selectedAno === eleicao.ano;
+                return (
+                  <button
+                    key={eleicao.ano}
+                    onClick={() => setSelectedAno(eleicao.ano)}
+                    className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-emerald-500 text-neutral-950 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400/50'
+                        : isDark
+                        ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                        : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+                    }`}
+                  >
+                    <span>{eleicao.ano}</span>
+                    <span className={`text-[10px] uppercase font-mono px-1 py-0.2 rounded ${
+                      isSelected ? 'bg-black/20 text-neutral-950' : 'bg-neutral-700/60 text-neutral-300'
+                    }`}>
+                      {eleicao.status === 'ao_vivo' ? 'Ao Vivo' : 'Real 100%'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Turno (quando 2022 ou 2024) */}
+          {(selectedAno === '2022' || selectedAno === '2024') && (
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-neutral-800/40">
+              <span className="text-xs uppercase font-mono font-semibold tracking-wider text-neutral-400">
+                Turno da Eleição:
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSelectedTurno('1')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    selectedTurno === '1'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : isDark ? 'bg-neutral-800 text-neutral-400 hover:text-white' : 'bg-neutral-100 text-neutral-600'
+                  }`}
+                >
+                  1º Turno Oficial
+                </button>
+                <button
+                  onClick={() => setSelectedTurno('2')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    selectedTurno === '2'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : isDark ? 'bg-neutral-800 text-neutral-400 hover:text-white' : 'bg-neutral-100 text-neutral-600'
+                  }`}
+                >
+                  2º Turno Oficial
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Seletor de Cargos Válidos */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-neutral-800/40">
+            <span className="text-xs uppercase font-mono font-semibold tracking-wider text-neutral-400 flex items-center gap-1.5">
+              <Vote className="w-3.5 h-3.5 text-blue-400" />
+              Função / Cargo:
+            </span>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {cargosValidos.map((cargo) => {
+                const isActive = selectedCargo === cargo.codigo;
+                return (
+                  <button
+                    key={cargo.codigo}
+                    onClick={() => handleSelectCargo(cargo.codigo)}
+                    className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
+                        : isDark
+                        ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                        : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+                    }`}
+                  >
+                    {cargo.nome}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Seletor de UF / Abrangência */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-neutral-800/40">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xs uppercase font-mono font-semibold tracking-wider text-neutral-400">
+                {selectedCargo === '1' ? 'Abrangência:' : selectedCargo === '11' ? 'Município / Capital:' : 'Estado (UF):'}
+              </span>
+              <span className="text-xs font-bold text-white bg-neutral-800 px-2.5 py-0.5 rounded">
+                {selectedUf === 'BR'
+                  ? 'Brasil (Total Nacional)'
+                  : `${ESTADOS_BRASIL.find((e) => e.uf === selectedUf)?.nome || selectedUf} (${selectedUf})`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {selectedCargo === '1' ? (
+                <div className="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-lg">
+                  🇧🇷 Apuração Federal Consolidada (Todo o País)
+                </div>
+              ) : selectedCargo === '11' ? (
+                <select
+                  value={selectedUf}
+                  onChange={(e) => setSelectedUf(e.target.value)}
+                  className={`text-xs sm:text-sm font-semibold rounded-lg px-3 py-1.5 border transition-colors outline-none cursor-pointer ${
+                    isDark
+                      ? 'bg-neutral-950 border-neutral-700 text-neutral-200 focus:border-emerald-500'
+                      : 'bg-white border-neutral-300 text-neutral-900 focus:border-emerald-600'
+                  }`}
+                >
+                  <option value="SP">São Paulo (SP)</option>
+                  <option value="RJ">Rio de Janeiro (RJ)</option>
+                  <option value="RN">Natal (RN)</option>
+                </select>
+              ) : (
+                <select
+                  value={selectedUf}
+                  onChange={(e) => setSelectedUf(e.target.value)}
+                  className={`text-xs sm:text-sm font-semibold rounded-lg px-3 py-1.5 border transition-colors outline-none cursor-pointer ${
+                    isDark
+                      ? 'bg-neutral-950 border-neutral-700 text-neutral-200 focus:border-emerald-500'
+                      : 'bg-white border-neutral-300 text-neutral-900 focus:border-emerald-600'
+                  }`}
+                >
+                  <optgroup label="Principais Colégios Eleitorais">
+                    <option value="SP">São Paulo (SP)</option>
+                    <option value="RJ">Rio de Janeiro (RJ)</option>
+                    <option value="RN">Rio Grande do Norte (RN)</option>
+                    <option value="MG">Minas Gerais (MG)</option>
+                    <option value="BA">Bahia (BA)</option>
+                    <option value="RS">Rio Grande do Sul (RS)</option>
+                    <option value="PR">Paraná (PR)</option>
+                    <option value="CE">Ceará (CE)</option>
+                    <option value="PE">Pernambuco (PE)</option>
+                    <option value="DF">Distrito Federal (DF)</option>
+                  </optgroup>
+                  <optgroup label="Demais Estados">
+                    <option value="SC">Santa Catarina (SC)</option>
+                    <option value="GO">Goiás (GO)</option>
+                    <option value="MA">Maranhão (MA)</option>
+                    <option value="PA">Pará (PA)</option>
+                    <option value="PB">Paraíba (PB)</option>
+                    <option value="ES">Espírito Santo (ES)</option>
+                    <option value="AM">Amazonas (AM)</option>
+                    <option value="MT">Mato Grosso (MT)</option>
+                    <option value="MS">Mato Grosso do Sul (MS)</option>
+                    <option value="AL">Alagoas (AL)</option>
+                    <option value="PI">Piauí (PI)</option>
+                    <option value="SE">Sergipe (SE)</option>
+                    <option value="RO">Rondônia (RO)</option>
+                    <option value="TO">Tocantins (TO)</option>
+                    <option value="AC">Acre (AC)</option>
+                    <option value="AP">Amapá (AP)</option>
+                    <option value="RR">Roraima (RR)</option>
+                  </optgroup>
+                </select>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 3. CASO ELEIÇÃO ATUAL 2026: AGUARDANDO DADOS REAIS DO TSE    */}
+      {/* O RESULTADO DEVE FICAR EM BRANCO ATÉ QUE HAJA DADOS NO TSE  */}
+      {/* ============================================================ */}
+      {selectedAno === '2026' && dados && !dados.temDadosSuficientes ? (
+        <div className="space-y-6">
+          {/* Card de Métricas Zeradas em Branco */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-white border-neutral-200'}`}>
+              <span className="text-xs font-mono uppercase text-neutral-400 block mb-1">Urnas Apuradas</span>
+              <div className="text-2xl font-bold font-mono text-neutral-500">0,00%</div>
+              <span className="text-[11px] text-neutral-500 font-mono">0 de {dados.s.toLocaleString('pt-BR')} seções</span>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-white border-neutral-200'}`}>
+              <span className="text-xs font-mono uppercase text-neutral-400 block mb-1">Votos Válidos</span>
+              <div className="text-2xl font-bold font-mono text-neutral-500">0 votos</div>
+              <span className="text-[11px] text-neutral-500 font-mono">Aguardando contagem</span>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-white border-neutral-200'}`}>
+              <span className="text-xs font-mono uppercase text-neutral-400 block mb-1">Brancos & Nulos</span>
+              <div className="text-2xl font-bold font-mono text-neutral-500">0 / 0</div>
+              <span className="text-[11px] text-neutral-500 font-mono">Totalização não iniciada</span>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-white border-neutral-200'}`}>
+              <span className="text-xs font-mono uppercase text-neutral-400 block mb-1">Situação do Pleito</span>
+              <div className="text-sm font-bold text-amber-400 flex items-center gap-1.5 mt-1">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                Aguardando Apuração TSE
+              </div>
+              <span className="text-[11px] text-neutral-500 font-mono block mt-1">Previsto: 04/10/2026 às 17h</span>
+            </div>
+          </div>
+
+          {/* Painel Central em Branco / Informativo da Justiça Eleitoral */}
+          <div
+            className={`p-8 sm:p-12 rounded-2xl border text-center transition-all ${
+              isDark
+                ? 'bg-neutral-900/40 border-neutral-800'
+                : 'bg-white border-neutral-200 shadow-sm'
+            }`}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Clock className="w-8 h-8" />
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-bold tracking-tight mb-2">
+              Aguardando Início da Totalização Oficial pelo TSE
+            </h3>
+
+            <p className={`text-sm sm:text-base max-w-2xl mx-auto leading-relaxed ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
+              Conforme as diretrizes oficiais de transparência, a aba de apuração para a <strong>Eleição 2026</strong> permanece em branco e não exibe números fictícios. A Justiça Eleitoral transmitirá os primeiros dados reais a partir das <strong>17h00 (horário de Brasília) do dia 04/10/2026</strong>.
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <span className="text-xs font-mono text-neutral-500 bg-neutral-800/80 px-3 py-1.5 rounded-lg border border-neutral-700/60">
+                Endpoint Monitorado: <code>resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/...</code>
+              </span>
+            </div>
+
+            {/* Ação para ver dados reais de eleições anteriores */}
+            <div className="mt-8 pt-6 border-t border-neutral-800/60 max-w-xl mx-auto">
+              <span className="text-xs text-neutral-400 uppercase font-mono font-semibold block mb-3">
+                Quer ver a apuração real de eleições anteriores no Brasil?
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedAno('2022');
+                    setSelectedCargo('1');
+                    setSelectedUf('BR');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md"
+                >
+                  Ver Eleição 2022 (Lula x Bolsonaro)
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedAno('2024');
+                    setSelectedCargo('11');
+                    setSelectedUf('SP');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all border border-neutral-700"
+                >
+                  Ver Prefeituras 2024 (SP, RJ, Natal...)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ============================================================ */}
+      {/* 4. CASO COM DADOS REAIS AUDITADOS (2022, 2024 ou 2026 LIVE)  */}
+      {/* ============================================================ */}
+      {dados && dados.temDadosSuficientes && (
+        <div className="space-y-6">
+          {/* Métricas Oficiais Concluídas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Card 1: Urnas Apuradas */}
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between text-neutral-400 mb-2">
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                  Urnas Apuradas
+                </span>
+                <span className="text-xs font-mono font-bold text-emerald-400">
+                  {dados.pst.toFixed(2)}%
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-white mb-2 tabular-nums">
+                {dados.pst.toFixed(2)}%
+              </div>
+              <div className="w-full bg-neutral-800 rounded-full h-2 mb-2 overflow-hidden">
+                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${Math.min(dados.pst, 100)}%` }} />
+              </div>
+              <div className="text-xs text-neutral-400 flex items-center justify-between font-mono">
+                <span>{dados.st.toLocaleString('pt-BR')} seções</span>
+                <span>de {dados.s.toLocaleString('pt-BR')}</span>
+              </div>
+            </div>
+
+            {/* Card 2: Votos Válidos */}
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between text-neutral-400 mb-2">
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                  Votos Válidos
+                </span>
+                <span className="text-xs font-mono text-neutral-400">{dados.pvv.toFixed(2)}%</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-emerald-400 mb-2 tabular-nums">
+                {dados.vv.toLocaleString('pt-BR')}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-2 border-t border-neutral-800/60 text-neutral-400">
+                <div>
+                  <span>Brancos: </span>
+                  <span className="text-neutral-200 font-semibold">{dados.pvb.toFixed(2)}%</span>
+                </div>
+                <div className="text-right">
+                  <span>Nulos: </span>
+                  <span className="text-neutral-200 font-semibold">{dados.ptvn.toFixed(2)}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Comparecimento */}
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between text-neutral-400 mb-2">
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <Vote className="w-3.5 h-3.5 text-purple-400" />
+                  Comparecimento
+                </span>
+                <span className="text-xs font-mono text-neutral-400">Total Votos</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-white mb-2 tabular-nums">
+                {dados.v.toLocaleString('pt-BR')}
+              </div>
+              <div className="text-xs text-neutral-400 flex items-center justify-between font-mono pt-2 border-t border-neutral-800/60">
+                <span>Abstenção:</span>
+                <span className="text-amber-400 font-semibold">{dados.pa.toFixed(2)}% ({dados.a.toLocaleString('pt-BR')})</span>
+              </div>
+            </div>
+
+            {/* Card 4: Situação */}
+            <div className={`p-4 rounded-xl border ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between text-neutral-400 mb-2">
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  Totalização TSE
+                </span>
+                <span className="text-xs font-mono text-neutral-400">{dados.dt}</span>
+              </div>
+              <div className="mb-2">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-sm font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Totalização Concluída (100%)
+                </div>
+              </div>
+              <div className="text-[11px] text-neutral-400 font-mono pt-1">
+                Boletim emitido às {dados.hg}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Ranking Oficial de Candidatos */}
+          <div className={`p-4 sm:p-6 rounded-2xl border ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200 shadow-sm'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+                  <span>Resultado Oficial: {cargoInfo.nome} ({dados.ufNome})</span>
+                  <span className="text-xs px-2 py-0.5 rounded font-mono font-normal bg-neutral-800 text-neutral-300">
+                    Eleição {dados.ano} ({dados.t}º Turno)
+                  </span>
+                </h2>
+                <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                  Votos válidos auditados e proclamados pela Justiça Eleitoral.
+                </p>
+              </div>
+
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou partido..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl text-xs sm:text-sm border transition-colors outline-none ${
+                    isDark
+                      ? 'bg-neutral-950 border-neutral-800 text-white placeholder-neutral-500 focus:border-emerald-500'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:border-emerald-600'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Candidatos Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {candidatosFiltrados.map((candidate, index) => {
+                const isLeader = index === 0;
+                const isSecond = index === 1;
+
+                return (
+                  <div
+                    key={candidate.sqcand || candidate.n}
+                    className={`p-4 rounded-xl border transition-all relative overflow-hidden flex flex-col justify-between ${
+                      isLeader
+                        ? 'border-emerald-500/60 bg-gradient-to-br from-emerald-950/20 via-neutral-900/90 to-neutral-900/90 ring-1 ring-emerald-500/40'
+                        : isSecond
+                        ? 'border-blue-500/50 bg-gradient-to-br from-blue-950/15 via-neutral-900/90 to-neutral-900/90'
+                        : isDark
+                        ? 'bg-neutral-900/60 border-neutral-800'
+                        : 'bg-white border-neutral-200 shadow-sm'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Row: Posição, Número, Status */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                            isLeader
+                              ? 'bg-emerald-500 text-neutral-950'
+                              : isSecond
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-neutral-800 text-neutral-300'
+                          }`}>
+                            #{index + 1}
+                          </span>
+                          <span className="text-xs font-mono font-extrabold px-2 py-0.5 rounded bg-neutral-800 text-white border border-neutral-700">
+                            Nº {candidate.n}
+                          </span>
+                        </div>
+
+                        <span className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded ${
+                          candidate.st.toLowerCase().includes('eleito')
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : candidate.st.toLowerCase().includes('2º turno')
+                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}>
+                          {candidate.st}
+                        </span>
+                      </div>
+
+                      {/* Nome & Partido */}
+                      <div className="mb-3">
+                        <h3 className="text-base sm:text-lg font-bold tracking-tight text-white line-clamp-1">
+                          {candidate.nm}
+                        </h3>
+                        {candidate.nmCompleto && candidate.nmCompleto !== candidate.nm && (
+                          <p className="text-xs text-neutral-400 line-clamp-1 mb-0.5">
+                            {candidate.nmCompleto}
+                          </p>
+                        )}
+                        <p className="text-xs text-neutral-400 font-medium line-clamp-1">
+                          {candidate.cc}
+                        </p>
+                        {candidate.nv && (
+                          <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                            Vice/Suplente: {candidate.nv}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Votos Válidos e Barra */}
+                    <div className="pt-3 border-t border-neutral-800/60 mt-2">
+                      <div className="flex items-baseline justify-between mb-1.5">
+                        <div>
+                          <span className="text-[10px] uppercase font-mono font-semibold tracking-wider text-neutral-400 block">
+                            Votos Válidos
+                          </span>
+                          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight tabular-nums text-emerald-400">
+                            {candidate.pvap.toFixed(2)}%
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-mono font-semibold tracking-wider text-neutral-400 block">
+                            Total de Votos
+                          </span>
+                          <span className="text-xs sm:text-sm font-mono font-bold text-white tabular-nums">
+                            {candidate.vap.toLocaleString('pt-BR')} votos
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="w-full bg-neutral-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full ${
+                            isLeader ? 'bg-emerald-500' : isSecond ? 'bg-blue-500' : 'bg-neutral-600'
+                          }`}
+                          style={{ width: `${Math.min(candidate.pvap, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Caixa Institucional de Transparência Eleitoral */}
+      <div className={`p-4 sm:p-5 rounded-xl border text-xs sm:text-sm ${
+        isDark ? 'bg-neutral-950/70 border-neutral-800 text-neutral-300' : 'bg-neutral-50 border-neutral-200 text-neutral-700'
+      }`}>
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="font-bold text-white">Transparência e Integridade dos Dados da Justiça Eleitoral</h4>
+            <p className="text-neutral-400 leading-relaxed">
+              Todos os resultados exibidos nesta aba refletem estritamente as atas de totalização e boletins de urna (BUs) certificados pelo Tribunal Superior Eleitoral (TSE). Para a eleição vigente de 2026, nenhum número estimado ou fictício é computado como voto; os campos são atualizados em tempo real assim que os primeiros boletins forem transmitidos pela Justiça Eleitoral.
+            </p>
+            <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-mono text-neutral-400">
+              <span>• Portal Oficial de Dados Abertos: dadosabertos.tse.jus.br</span>
+              <a
+                href="https://resultados.tse.jus.br"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:underline flex items-center gap-1"
+              >
+                <span>Acessar Portal do TSE</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

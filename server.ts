@@ -8,7 +8,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const portArgIndex = process.argv.indexOf('--port');
+const portFromArg = portArgIndex !== -1 && process.argv[portArgIndex + 1] ? parseInt(process.argv[portArgIndex + 1], 10) : null;
+// Dev server MUST run on port 3000 in AI Studio. Cloud Run sets PORT=8080 which is reserved for Nginx.
+const PORT = portFromArg || (process.env.APP_PORT ? parseInt(process.env.APP_PORT, 10) : (process.env.PORT && process.env.PORT !== '8080' ? parseInt(process.env.PORT, 10) : 3000));
 const isProd = process.env.NODE_ENV === 'production';
 
 // Cache structure
@@ -296,11 +299,55 @@ app.get('/api/polymarket/export-csv', async (_req, res) => {
   }
 });
 
+// Proxy endpoint for official TSE Vote Counting (Resultados TSE)
+app.get('/api/tse/apuracao', async (req, res) => {
+  const cargo = ((req.query.cargo as string) || '1').trim();
+  const uf = ((req.query.uf as string) || (cargo === '1' ? 'br' : 'sp')).toLowerCase().trim();
+  const modo = (req.query.modo as string) || 'auto';
+
+  // TSE election code for 2026: 6257 (Federal/Presidente) or 6259 (Estadual)
+  const eleicao = cargo === '1' ? '6257' : '6259';
+  const cargoPadded = cargo.padStart(4, '0');
+  const cacheKey = `tse_${eleicao}_${uf}_${cargo}`;
+  const cached = getCached(cacheKey);
+
+  if (cached && modo !== 'live_force') {
+    return res.json({ sucesso: true, fonte: 'cache', dados: cached });
+  }
+
+  // Official TSE CDN URL pattern
+  const tseUrl = `https://resultados.tse.jus.br/oficial/ele2026/${eleicao}/dados-simplificados/${uf}/${uf}-c${cargoPadded}-e00${eleicao}-r.json`;
+
+  try {
+    const tseResponse = await fetch(tseUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MonitorEleitoralBR/1.0',
+        Accept: 'application/json',
+      },
+    });
+
+    if (tseResponse.ok) {
+      const rawData = await tseResponse.json();
+      setCached(cacheKey, rawData, 15); // Cache for 15s
+      return res.json({ sucesso: true, fonte: 'tse_live', url: tseUrl, dados: rawData });
+    }
+  } catch (error: any) {
+    console.warn(`[TSE Proxy] Falha ao consultar TSE em ${tseUrl}:`, error.message);
+  }
+
+  return res.json({
+    sucesso: false,
+    motivo: 'aguardando_apuracao_tse',
+    mensagem: 'A transmissão oficial do TSE para esta eleição ainda não foi iniciada ou o arquivo está sendo gerado pela Justiça Eleitoral.',
+    url: tseUrl,
+  });
+});
+
 // Vite or Static Serving
 if (!isProd) {
   const vite = await createViteServer({
     server: { middlewareMode: true },
-    appType: 'spa',
+    appType: 'custom',
   });
   app.use(vite.middlewares);
 
@@ -310,13 +357,17 @@ if (!isProd) {
       return next();
     }
     try {
-      let html = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
-      // If index.html points to pre-bundled assets, swap to live /src/main.tsx for dev HMR
-      html = html.replace(
-        /<script type="module" crossorigin src="\.?\/assets\/index\.js"><\/script>/,
-        '<script type="module" src="/src/main.tsx"></script>'
-      );
-      html = html.replace(/<link rel="stylesheet" crossorigin href="\.?\/assets\/index\.css">/, '');
+      const templatePath = fs.existsSync(path.resolve(__dirname, 'index.template.html'))
+        ? path.resolve(__dirname, 'index.template.html')
+        : path.resolve(__dirname, 'index.html');
+      let html = fs.readFileSync(templatePath, 'utf-8');
+      if (!html.includes('/src/main.tsx')) {
+        html = html.replace(
+          /<script\s+type="module"\s+crossorigin\s+src="\.?\/assets\/index\.js"><\/script>/i,
+          '<script type="module" src="/src/main.tsx"></script>'
+        );
+        html = html.replace(/<link\s+rel="stylesheet"\s+crossorigin\s+href="\.?\/assets\/index\.css">/i, '');
+      }
       const transformed = await vite.transformIndexHtml(req.originalUrl, html);
       res.status(200).set({ 'Content-Type': 'text/html' }).end(transformed);
     } catch (e) {

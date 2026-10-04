@@ -11,6 +11,7 @@ import { CandidateLeaderboard } from './components/CandidateLeaderboard';
 import { InteractiveChart } from './components/InteractiveChart';
 import { FluctuationHistoryTable } from './components/FluctuationHistoryTable';
 import { RelatedMarkets } from './components/RelatedMarkets';
+import { TSEApuracaoView } from './components/TSEApuracaoView';
 import { CandidateModal } from './components/CandidateModal';
 import { MarketRulesModal } from './components/MarketRulesModal';
 import { fetchElectionData, fetchRelatedEvents, exportElectionCSV, BRAZIL_GOVERNOR_STATES } from './services/polymarketService';
@@ -199,21 +200,31 @@ export default function App() {
         onSelectSection={setActiveSection}
       />
 
-      {/* Office Selector: Presidente vs Governador */}
-      <OfficeSelector
-        officeType={officeType}
-        onChangeOfficeType={handleOfficeTypeChange}
-        selectedStateUf={selectedStateUf}
-        onSelectStateUf={handleSelectStateUf}
-        isDark={isDark}
-        isLoading={loading || isRefreshing}
-      />
+      {/* Office Selector: Presidente vs Governador (Apenas para visualização Polymarket) */}
+      {activeSection !== 'tse_apuracao' && (
+        <OfficeSelector
+          officeType={officeType}
+          onChangeOfficeType={handleOfficeTypeChange}
+          selectedStateUf={selectedStateUf}
+          onSelectStateUf={handleSelectStateUf}
+          isDark={isDark}
+          isLoading={loading || isRefreshing}
+        />
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
+        {/* Nova Aba: Apuração Oficial do TSE em Tempo Real */}
+        {activeSection === 'tse_apuracao' && (
+          <TSEApuracaoView
+            isDark={isDark}
+            onShowToast={showToast}
+          />
+        )}
+
         {/* Error Banner */}
-        {error && (
+        {activeSection !== 'tse_apuracao' && error && (
           <div className="mb-6 p-4 rounded-xl border border-rose-800/80 bg-rose-950/40 text-rose-200 flex items-center justify-between gap-3 text-xs sm:text-sm font-mono">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
@@ -228,8 +239,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && !electionData && (
+        {/* Loading State Polymarket */}
+        {activeSection !== 'tse_apuracao' && loading && !electionData && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin mb-4" />
             <h2 className="text-lg font-bold">Conectando ao Feed da Polymarket...</h2>
@@ -239,8 +250,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Populated Content */}
-        {electionData && (
+        {/* Populated Content Polymarket */}
+        {activeSection !== 'tse_apuracao' && electionData && (
           <div className="space-y-8">
             {/* 1. Main Priority: Probabilidades em Tempo Real (Candidatos) */}
             {(activeSection === 'overview') && (
