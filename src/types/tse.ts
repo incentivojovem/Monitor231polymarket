@@ -31,9 +31,9 @@ export interface TSECandidate {
 export interface TSEResultData {
   ano: EleicaoAno;        // '2026', '2024', '2022'
   ele: string;            // Código oficial da eleição no TSE
-  tpabr: 'BR' | 'UF' | 'MU'; // Tipo de abrangência
-  cdabr: string;          // Sigla do Estado, 'BR' ou Código Município
-  ufNome: string;         // Nome amigável ("Brasil", "São Paulo", etc.)
+  tpabr: 'BR' | 'UF' | 'MU' | 'ZZ'; // Tipo de abrangência ('ZZ' para Exterior)
+  cdabr: string;          // Sigla do Estado, 'BR', 'ZZ' ou Código Município
+  ufNome: string;         // Nome amigável ("Brasil", "Exterior (Zona ZZ)", "São Paulo", etc.)
   carper: CargoCodigo;    // Código do cargo
   cargoNome: string;      // Nome do cargo ("Presidente", "Governador", etc.)
   t: string;              // Turno ("1" ou "2")

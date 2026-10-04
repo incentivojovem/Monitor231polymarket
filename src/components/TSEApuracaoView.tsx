@@ -11,6 +11,7 @@ import {
   fetchTSEApuracao,
   exportTSEBoletimCSV,
 } from '../services/tseService';
+import { PAISES_EXTERIOR_BUS, PaisExteriorBU } from '../services/tseHistoricalData';
 import {
   RefreshCw,
   Download,
@@ -25,6 +26,8 @@ import {
   Calendar,
   ShieldCheck,
   Radio,
+  Globe2,
+  FileText,
 } from 'lucide-react';
 
 interface TSEApuracaoViewProps {
@@ -43,6 +46,9 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
   // Cargo e UF selecionados
   const [selectedCargo, setSelectedCargo] = useState<CargoCodigo>('1');
   const [selectedUf, setSelectedUf] = useState<string>('BR');
+
+  // Modo de visualização quando no exterior (Zona ZZ): 'oficial' ou 'paises'
+  const [viewModoZZ, setViewModoZZ] = useState<'paises' | 'oficial'>('paises');
 
   // Dados da apuração
   const [dados, setDados] = useState<TSEResultData | null>(null);
@@ -141,6 +147,45 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
   const cargoInfo = useMemo(() => {
     return CARGOS_TSE.find((c) => c.codigo === selectedCargo) || CARGOS_TSE[0];
   }, [selectedCargo]);
+
+  // Soma das % e votos para os presidentes nos BUs dos países do exterior
+  const totaisBUsExterior = useMemo(() => {
+    let totalLula = 0;
+    let totalBolsonaro = 0;
+    let totalValidos = 0;
+    let paisesLula = 0;
+    let paisesBolsonaro = 0;
+
+    for (const p of PAISES_EXTERIOR_BUS) {
+      totalLula += p.resultado2022T2.lulaVotos;
+      totalBolsonaro += p.resultado2022T2.bolsonaroVotos;
+      totalValidos += p.resultado2022T2.totalValidos;
+      if (p.resultado2022T2.vencedor === 'Lula') {
+        paisesLula++;
+      } else {
+        paisesBolsonaro++;
+      }
+    }
+
+    const pctLula = totalValidos > 0 ? (totalLula / totalValidos) * 100 : 0;
+    const pctBolsonaro = totalValidos > 0 ? (totalBolsonaro / totalValidos) * 100 : 0;
+    const diferencaVotos = Math.abs(totalLula - totalBolsonaro);
+    const diferencaPct = Math.abs(pctLula - pctBolsonaro);
+
+    return {
+      totalValidos,
+      totalLula,
+      pctLula,
+      totalBolsonaro,
+      pctBolsonaro,
+      paisesLula,
+      paisesBolsonaro,
+      totalPaises: PAISES_EXTERIOR_BUS.length,
+      lider: totalLula >= totalBolsonaro ? 'Lula' : 'Bolsonaro',
+      diferencaVotos,
+      diferencaPct,
+    };
+  }, []);
 
   // Exportar CSV
   const handleExportCSV = () => {
@@ -352,21 +397,49 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
             <div className="flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-xs uppercase font-mono font-semibold tracking-wider text-neutral-400">
-                {selectedCargo === '1' ? 'Abrangência:' : selectedCargo === '11' ? 'Município / Capital:' : 'Estado (UF):'}
+                {selectedCargo === '1' ? 'Abrangência / Local:' : selectedCargo === '11' ? 'Município / Capital:' : 'Estado (UF):'}
               </span>
               <span className="text-xs font-bold text-white bg-neutral-800 px-2.5 py-0.5 rounded">
                 {selectedUf === 'BR'
                   ? 'Brasil (Total Nacional)'
+                  : selectedUf === 'ZZ'
+                  ? 'Exterior (Zona Eleitoral ZZ - TRE-DF)'
                   : `${ESTADOS_BRASIL.find((e) => e.uf === selectedUf)?.nome || selectedUf} (${selectedUf})`}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              {selectedCargo === '1' ? (
-                <div className="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-lg">
-                  🇧🇷 Apuração Federal Consolidada (Todo o País)
-                </div>
-              ) : selectedCargo === '11' ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedCargo === '1' && (
+                <>
+                  <button
+                    onClick={() => setSelectedUf('BR')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      selectedUf === 'BR'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : isDark ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-neutral-200 text-neutral-800'
+                    }`}
+                  >
+                    <span>🇧🇷</span>
+                    <span>Brasil (Geral)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedUf('ZZ')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      selectedUf === 'ZZ'
+                        ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400/50'
+                        : isDark ? 'bg-neutral-800 text-blue-400 border border-blue-500/30 hover:bg-neutral-700' : 'bg-blue-50 text-blue-800 border border-blue-200'
+                    }`}
+                    title="Votos de eleitores brasileiros no exterior (Embaixadas e Consulados)"
+                  >
+                    <span>🌍</span>
+                    <span>Exterior (Zona ZZ)</span>
+                    <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-black/20">ZZ</span>
+                  </button>
+                </>
+              )}
+
+              {selectedCargo === '11' ? (
                 <select
                   value={selectedUf}
                   onChange={(e) => setSelectedUf(e.target.value)}
@@ -380,7 +453,7 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
                   <option value="RJ">Rio de Janeiro (RJ)</option>
                   <option value="RN">Natal (RN)</option>
                 </select>
-              ) : (
+              ) : selectedCargo !== '1' ? (
                 <select
                   value={selectedUf}
                   onChange={(e) => setSelectedUf(e.target.value)}
@@ -422,11 +495,317 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
                     <option value="RR">Roraima (RR)</option>
                   </optgroup>
                 </select>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Banner Informativo Exclusivo: Zona Eleitoral do Exterior (ZZ) */}
+      {selectedUf === 'ZZ' && (
+        <div className="space-y-4 animate-fadeIn">
+          <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs sm:text-sm ${
+            isDark ? 'bg-blue-950/40 border-blue-800/80 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-900'
+          }`}>
+            <div className="flex items-start gap-3">
+              <span className="text-3xl mt-0.5">🌍</span>
+              <div className="space-y-1">
+                <h4 className="font-bold text-base flex flex-wrap items-center gap-2">
+                  <span>Zona Eleitoral do Exterior (Sigla Oficial TSE: ZZ)</span>
+                  <span className="text-[10px] font-mono uppercase bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded">
+                    TRE-DF / Cartório da 1ª ZE Exterior
+                  </span>
+                </h4>
+                <p className="text-xs opacity-90 leading-relaxed max-w-3xl">
+                  Reúne os votos de mais de <strong>697 mil eleitores brasileiros em mais de 140 países</strong> (Lisboa, Londres, Miami, Nova York, Tóquio, Paris, Berlim, Sydney, etc.).
+                  Por lei (Código Eleitoral Art. 225), eleitores no exterior votam <strong>exclusivamente para Presidente e Vice-Presidente da República</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Alternador de Modo: BUs por País vs Totalização Oficial */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/30 border border-blue-500/30 shrink-0 self-start lg:self-center">
+              <button
+                onClick={() => setViewModoZZ('paises')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewModoZZ === 'paises'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Globe2 className="w-3.5 h-3.5" />
+                <span>BUs por País / Fuso Horário</span>
+              </button>
+              <button
+                onClick={() => setViewModoZZ('oficial')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewModoZZ === 'oficial'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Totalização Oficial TSE</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Seletor 'BUs por País' ativado: Exibe a lista detalhada e a explicação da regra das 17h */}
+          {viewModoZZ === 'paises' && (
+            <div className="space-y-4">
+              {/* Caixa explicativa sobre o 'embargo' das 17h vs os BUs físicos */}
+              <div className={`p-4 sm:p-5 rounded-2xl border text-xs sm:text-sm ${
+                isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-neutral-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h5 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
+                      <span>Como funciona a apuração no exterior: Por que o TSE só totaliza às 17h?</span>
+                    </h5>
+                    <p className={`leading-relaxed ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
+                      <strong>1. O Embargo Oficial do TSE:</strong> Pela Resolução nº 23.736/2024 do TSE, os computadores da Justiça Eleitoral só podem divulgar os resultados consolidados a partir das <strong>17h00 (horário de Brasília)</strong>, para garantir que os votos de quem já terminou de votar na Ásia ou Europa não influenciem os eleitores que ainda estão votando no Brasil.
+                    </p>
+                    <p className={`leading-relaxed ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
+                      <strong>2. Mas o Boletim de Urna (BU) impresso é PÚBLICO:</strong> Assim que a votação encerra no horário local de cada consulado (ex: Nova Zelândia às 2h da madrugada de Brasília, Japão às 7h da manhã), a urna imprime imediatamente o <strong>Boletim de Urna em papel</strong>, que é colado na porta da seção. Qualquer cidadão ou fiscal de partido pode fotografar o BU e ler o QR Code oficial.
+                    </p>
+                    <div className="pt-1 flex flex-wrap items-center gap-3 text-xs font-mono text-neutral-400">
+                      <span className="text-emerald-400">✓ Abaixo: dados oficiais auditados dos BUs de cada país no 2º Turno da Eleição Presidencial de 2022.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD DE SOMA DAS % E VOTOS CONSOLIDADOS DOS PRESIDENTES NOS PAÍSES */}
+              <div className={`p-5 sm:p-6 rounded-2xl border ${
+                isDark
+                  ? 'bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-blue-950/40 border-blue-900/40 shadow-xl'
+                  : 'bg-white border-blue-200 shadow-md'
+              }`}>
+                {/* Topo do Card de Soma */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-800/60">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 rounded-xl bg-blue-600/15 border border-blue-500/30 text-blue-400">
+                      <Vote className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-base sm:text-lg text-white flex items-center gap-2">
+                        <span>Soma das Porcentagens e Votos dos Presidentes</span>
+                        <span className="text-[10px] font-mono uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
+                          BUs dos {totaisBUsExterior.totalPaises} Países
+                        </span>
+                      </h4>
+                      <p className="text-xs text-neutral-400">
+                        Total ponderado da apuração dos Boletins de Urna emitidos nos consulados e embaixadas
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-mono px-3 py-1.5 rounded-lg bg-neutral-800/90 text-neutral-300 border border-neutral-700/80">
+                      Total Válidos: <strong className="text-white">{totaisBUsExterior.totalValidos.toLocaleString('pt-BR')}</strong>
+                    </span>
+                    <span className="text-xs font-mono px-3 py-1.5 rounded-lg bg-neutral-800/90 text-neutral-300 border border-neutral-700/80">
+                      Placar: <strong className="text-red-400">{totaisBUsExterior.paisesLula} países</strong> a <strong className="text-emerald-400">{totaisBUsExterior.paisesBolsonaro} países</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Grid comparativo dos dois candidatos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-5">
+                  {/* Card Lula */}
+                  <div className={`p-4 rounded-xl border transition-all ${
+                    isDark ? 'bg-neutral-950/60 border-red-900/40 hover:border-red-700/60' : 'bg-red-50/50 border-red-200'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-red-500 ring-4 ring-red-500/20" />
+                        <div>
+                          <div className="font-bold text-base text-white">Lula</div>
+                          <span className="text-xs text-neutral-400 font-mono">PT - Federação Brasil</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-800/80">
+                        {totaisBUsExterior.paisesLula} vitórias
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between mt-3">
+                      <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-red-400 tabular-nums">
+                        {totaisBUsExterior.pctLula.toFixed(2)}%
+                      </div>
+                      <div className="text-right font-mono text-xs text-neutral-300">
+                        <span className="font-bold block text-sm sm:text-base text-white">
+                          {totaisBUsExterior.totalLula.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-[11px] text-neutral-500">votos válidos somados</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-neutral-800/50 text-[11px] text-neutral-400 flex items-center justify-between">
+                      <span>Venceu em:</span>
+                      <span className="font-mono text-neutral-200 font-semibold">NZ, AU, KR, SG, FR, DE, GB, PT</span>
+                    </div>
+                  </div>
+
+                  {/* Card Bolsonaro */}
+                  <div className={`p-4 rounded-xl border transition-all ${
+                    isDark ? 'bg-neutral-950/60 border-emerald-900/40 hover:border-emerald-700/60' : 'bg-emerald-50/50 border-emerald-200'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
+                        <div>
+                          <div className="font-bold text-base text-white">Jair Bolsonaro</div>
+                          <span className="text-xs text-neutral-400 font-mono">PL - Pelo Bem do Brasil</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80">
+                        {totaisBUsExterior.paisesBolsonaro} vitórias
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between mt-3">
+                      <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-emerald-400 tabular-nums">
+                        {totaisBUsExterior.pctBolsonaro.toFixed(2)}%
+                      </div>
+                      <div className="text-right font-mono text-xs text-neutral-300">
+                        <span className="font-bold block text-sm sm:text-base text-white">
+                          {totaisBUsExterior.totalBolsonaro.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-[11px] text-neutral-500">votos válidos somados</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-neutral-800/50 text-[11px] text-neutral-400 flex items-center justify-between">
+                      <span>Venceu em:</span>
+                      <span className="font-mono text-neutral-200 font-semibold">Japão (JP), Itália (IT), EUA (US)</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Barra de Proporção Geral Ponderada */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-red-400 font-bold">Lula: {totaisBUsExterior.pctLula.toFixed(2)}%</span>
+                    <span className="text-xs text-neutral-400">
+                      Vantagem: <strong className="text-white">+{totaisBUsExterior.diferencaVotos.toLocaleString('pt-BR')} votos</strong> (+{totaisBUsExterior.diferencaPct.toFixed(2)}%)
+                    </span>
+                    <span className="text-emerald-400 font-bold">Bolsonaro: {totaisBUsExterior.pctBolsonaro.toFixed(2)}%</span>
+                  </div>
+                  <div className="w-full bg-neutral-800 rounded-full h-3.5 overflow-hidden flex p-0.5 border border-neutral-700">
+                    <div
+                      className="bg-red-500 h-full rounded-l-full transition-all duration-500"
+                      style={{ width: `${totaisBUsExterior.pctLula}%` }}
+                      title={`Lula: ${totaisBUsExterior.pctLula.toFixed(2)}% (${totaisBUsExterior.totalLula.toLocaleString('pt-BR')} votos)`}
+                    />
+                    <div
+                      className="bg-emerald-500 h-full rounded-r-full transition-all duration-500"
+                      style={{ width: `${totaisBUsExterior.pctBolsonaro}%` }}
+                      title={`Bolsonaro: ${totaisBUsExterior.pctBolsonaro.toFixed(2)}% (${totaisBUsExterior.totalBolsonaro.toLocaleString('pt-BR')} votos)`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid dos Países em Ordem de Encerramento das Urnas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {PAISES_EXTERIOR_BUS.map((pais) => {
+                  const res = pais.resultado2022T2;
+                  const lulaVenceu = res.vencedor === 'Lula';
+
+                  return (
+                    <div
+                      key={pais.id}
+                      className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+                        isDark ? 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700' : 'bg-white border-neutral-200 shadow-sm'
+                      }`}
+                    >
+                      <div>
+                        {/* Topo do Card do País */}
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{pais.bandeira}</span>
+                            <div>
+                              <h4 className="font-bold text-sm sm:text-base text-white">{pais.pais}</h4>
+                              <span className="text-[11px] text-neutral-400 font-mono">
+                                {pais.cidades.join(', ')}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">
+                            #{pais.ordemFechamento}º a fechar
+                          </span>
+                        </div>
+
+                        {/* Horário de Fechamento */}
+                        <div className="my-2.5 p-2 rounded-lg bg-neutral-950/70 border border-neutral-800/80 text-[11px] font-mono">
+                          <div className="flex items-center justify-between text-neutral-400 mb-0.5">
+                            <span>Fechamento da urna:</span>
+                            <span className="text-amber-400 font-bold">{pais.fechamentoBrasilia}</span>
+                          </div>
+                          <div className="text-[10px] text-neutral-500">
+                            {pais.fusoInfo}
+                          </div>
+                        </div>
+
+                        {/* Resultado Real 2022 (2º Turno Oficial) */}
+                        <div className="pt-2 border-t border-neutral-800/60 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[11px] font-mono text-neutral-400">Total Válidos 2022:</span>
+                            <span className="font-mono font-bold text-white">{res.totalValidos.toLocaleString('pt-BR')} votos</span>
+                          </div>
+
+                          {/* Candidato 1: Lula */}
+                          <div>
+                            <div className="flex items-center justify-between text-xs mb-1 font-mono">
+                              <span className="flex items-center gap-1.5 font-bold text-neutral-200">
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                                Lula (PT)
+                              </span>
+                              <div className="space-x-1.5">
+                                <span className="font-bold text-white">{res.lulaPct.toFixed(2)}%</span>
+                                <span className="text-[10px] text-neutral-400">({res.lulaVotos.toLocaleString('pt-BR')})</span>
+                              </div>
+                            </div>
+                            <div className="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${res.lulaPct}%` }} />
+                            </div>
+                          </div>
+
+                          {/* Candidato 2: Bolsonaro */}
+                          <div>
+                            <div className="flex items-center justify-between text-xs mb-1 font-mono">
+                              <span className="flex items-center gap-1.5 font-bold text-neutral-200">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                Bolsonaro (PL)
+                              </span>
+                              <div className="space-x-1.5">
+                                <span className="font-bold text-white">{res.bolsonaroPct.toFixed(2)}%</span>
+                                <span className="text-[10px] text-neutral-400">({res.bolsonaroVotos.toLocaleString('pt-BR')})</span>
+                              </div>
+                            </div>
+                            <div className="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${res.bolsonaroPct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Nota de rodapé */}
+                      <div className="mt-3 pt-2 border-t border-neutral-800/40 text-[10px] text-neutral-400 italic">
+                        {pais.observacao}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* 3. CASO ELEIÇÃO ATUAL 2026: AGUARDANDO DADOS REAIS DO TSE    */}
@@ -500,11 +879,23 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
                   onClick={() => {
                     setSelectedAno('2022');
                     setSelectedCargo('1');
+                    setSelectedUf('ZZ');
+                    setSelectedTurno('2');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <span>🌍</span>
+                  <span>Ver Votação no Exterior 2022 (Zona ZZ)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedAno('2022');
+                    setSelectedCargo('1');
                     setSelectedUf('BR');
                   }}
                   className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md"
                 >
-                  Ver Eleição 2022 (Lula x Bolsonaro)
+                  Ver Brasil Geral 2022
                 </button>
                 <button
                   onClick={() => {
@@ -514,7 +905,7 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
                   }}
                   className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all border border-neutral-700"
                 >
-                  Ver Prefeituras 2024 (SP, RJ, Natal...)
+                  Ver Capitais 2024
                 </button>
               </div>
             </div>
@@ -765,6 +1156,9 @@ export const TSEApuracaoView: React.FC<TSEApuracaoViewProps> = ({
             <h4 className="font-bold text-white">Transparência e Integridade dos Dados da Justiça Eleitoral</h4>
             <p className="text-neutral-400 leading-relaxed">
               Todos os resultados exibidos nesta aba refletem estritamente as atas de totalização e boletins de urna (BUs) certificados pelo Tribunal Superior Eleitoral (TSE). Para a eleição vigente de 2026, nenhum número estimado ou fictício é computado como voto; os campos são atualizados em tempo real assim que os primeiros boletins forem transmitidos pela Justiça Eleitoral.
+            </p>
+            <p className="text-neutral-400 leading-relaxed text-xs">
+              <strong>Votação no Exterior (Zona Eleitoral ZZ):</strong> Os eleitores brasileiros residentes fora do país estão cadastrados na Zona Eleitoral ZZ, sob administração do Cartório da 1ª ZE do Exterior e do TRE-DF. Por força de lei, eles votam exclusivamente para Presidente e Vice-Presidente da República.
             </p>
             <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-mono text-neutral-400">
               <span>• Portal Oficial de Dados Abertos: dadosabertos.tse.jus.br</span>

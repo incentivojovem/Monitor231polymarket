@@ -94,6 +94,7 @@ export const CARGOS_TSE: CargoConfig[] = [
 ];
 
 export const ESTADOS_BRASIL: EstadoInfo[] = [
+  { uf: 'ZZ', nome: 'Exterior (Zona Eleitoral ZZ - TRE-DF)', regiao: 'Exterior', capital: 'Embaixadas e Consulados', eleitoradoAprox: 697078 },
   { uf: 'AC', nome: 'Acre', regiao: 'Norte', capital: 'Rio Branco', eleitoradoAprox: 600000 },
   { uf: 'AL', nome: 'Alagoas', regiao: 'Nordeste', capital: 'Maceió', eleitoradoAprox: 2300000 },
   { uf: 'AP', nome: 'Amapá', regiao: 'Norte', capital: 'Macapá', eleitoradoAprox: 550000 },
@@ -209,14 +210,15 @@ export function parseTSERawJson(raw: any, cargo: CargoCodigo, uf: string, ano: E
  */
 export function getEmptyTSEState(ano: EleicaoAno, cargo: CargoCodigo, ufInput: string): TSEResultData {
   const cargoInfo = CARGOS_TSE.find((c) => c.codigo === cargo) || CARGOS_TSE[0];
-  const uf = cargo === '1' ? 'BR' : ufInput.toUpperCase();
+  const uf = ufInput ? ufInput.toUpperCase() : (cargo === '1' ? 'BR' : 'SP');
   const estadoInfo = ESTADOS_BRASIL.find((e) => e.uf === uf);
-  const ufNome = uf === 'BR' ? 'Brasil' : estadoInfo?.nome || uf;
+  const ufNome = uf === 'BR' ? 'Brasil' : uf === 'ZZ' ? 'Exterior (Zona Eleitoral ZZ - TRE-DF)' : estadoInfo?.nome || uf;
+  const isExterior = uf === 'ZZ';
 
   return {
     ano,
     ele: cargo === '1' ? '6257' : '6259',
-    tpabr: uf === 'BR' ? 'BR' : 'UF',
+    tpabr: uf === 'BR' ? 'BR' : uf === 'ZZ' ? 'ZZ' : 'UF',
     cdabr: uf,
     ufNome,
     carper: cargo,
@@ -226,7 +228,7 @@ export function getEmptyTSEState(ano: EleicaoAno, cargo: CargoCodigo, ufInput: s
     hg: '--:--:--',
     dt: '04/10/2026',
     pst: 0,
-    s: uf === 'BR' ? 472075 : (estadoInfo ? Math.round(estadoInfo.eleitoradoAprox / 330) : 0),
+    s: uf === 'BR' ? 472075 : isExterior ? 1018 : (estadoInfo ? Math.round(estadoInfo.eleitoradoAprox / 330) : 0),
     st: 0,
     v: 0,
     vv: 0,
@@ -242,8 +244,9 @@ export function getEmptyTSEState(ano: EleicaoAno, cargo: CargoCodigo, ufInput: s
     fonte: 'tse_aguardando',
     temDadosSuficientes: false,
     ultimaAtualizacao: new Date().toISOString(),
-    mensagemTse:
-      'Aguardando o início da apuração das urnas pelo Tribunal Superior Eleitoral (TSE). A totalização oficial dos votos para as Eleições 2026 terá início às 17h00 (horário de Brasília) no dia 04/10/2026, assim que os primeiros boletins de urna (BUs) forem transmitidos pelos Tribunais Regionais Eleitorais (TREs).',
+    mensagemTse: isExterior
+      ? 'Aguardando a transmissão dos Boletins de Urna (BUs) das Embaixadas e Consulados brasileiros no exterior pelo Cartório da 1ª Zona Eleitoral do Exterior (TRE-DF/TSE). Devido aos fusos horários, a votação na Nova Zelândia, Austrália, Japão e Coreia do Sul encerra antes do fechamento das urnas no Brasil.'
+      : 'Aguardando o início da apuração das urnas pelo Tribunal Superior Eleitoral (TSE). A totalização oficial dos votos para as Eleições 2026 terá início às 17h00 (horário de Brasília) no dia 04/10/2026, assim que os primeiros boletins de urna (BUs) forem transmitidos pelos Tribunais Regionais Eleitorais (TREs).',
   };
 }
 
@@ -258,7 +261,7 @@ export async function fetchTSEApuracao(
   ufInput: string,
   turno: '1' | '2' = '1'
 ): Promise<TSEResultData> {
-  const uf = cargo === '1' ? 'BR' : ufInput.toUpperCase();
+  const uf = ufInput ? ufInput.toUpperCase() : (cargo === '1' ? 'BR' : 'SP');
 
   // 1. Dados Históricos Reais (2022 e 2024)
   if (ano === '2022' || ano === '2024') {
@@ -271,6 +274,11 @@ export async function fetchTSEApuracao(
     const chaveFallbackTurno = `${ano}_1_${uf}_${cargo}`;
     if (TSE_HISTORICAL_RESULTS[chaveFallbackTurno]) {
       return TSE_HISTORICAL_RESULTS[chaveFallbackTurno];
+    }
+
+    // Se for ZZ mas não encontrou fallback especial, tenta 1º turno de ZZ
+    if (uf === 'ZZ') {
+      return TSE_HISTORICAL_RESULTS['2022_2_ZZ_1'] || TSE_HISTORICAL_RESULTS['2022_1_ZZ_1'];
     }
 
     // Fallback para Presidente (se 2022) ou Prefeito SP (se 2024)
