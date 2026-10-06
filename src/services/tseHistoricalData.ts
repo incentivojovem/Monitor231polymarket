@@ -273,7 +273,7 @@ export const TSE_HISTORICAL_RESULTS: Record<string, TSEResultData> = {
   },
 
   // ==========================================
-  // 1.1 VOTAÇÃO NO EXTERIOR (ZONA ELEITORAL ZZ - TRE-DF)
+  // 1.1 VOTAÇÃO NO EXTERIOR 2022 (ZONA ELEITORAL ZZ - TRE-DF)
   // ==========================================
   '2022_2_ZZ_1': {
     ano: '2022',
@@ -1267,6 +1267,11 @@ export interface PaisExteriorBU {
   fechamentoBrasilia: string;
   fusoInfo: string;
   ordemFechamento: number;
+  status2026: 'divulgado' | 'em_votacao';
+  resultado2026: {
+    totalValidos: number;
+    statusApuracao: string;
+  };
   resultado2022T2: {
     lulaVotos: number;
     lulaPct: number;
@@ -1287,6 +1292,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~02h00 (madrugada)',
     fusoInfo: '+15h em relação a Brasília (1º país a encerrar votação no mundo)',
     ordemFechamento: 1,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 389,
       lulaPct: 72.98,
@@ -1295,7 +1305,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 533,
       vencedor: 'Lula',
     },
-    observacao: 'Primeira seção eleitoral a emitir Boletim de Urna (BU) impresso no mundo.',
+    observacao: 'Primeira seção eleitoral a emitir Boletim de Urna (BU) impresso no mundo. BU afixado e divulgado.',
   },
   {
     id: 'AU',
@@ -1305,6 +1315,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~05h00 (manhã)',
     fusoInfo: '+13h a +14h em relação a Brasília',
     ordemFechamento: 2,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 2961,
       lulaPct: 61.39,
@@ -1313,7 +1328,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 4823,
       vencedor: 'Lula',
     },
-    observacao: 'BUs afixados nas portas das seções diplomáticas ao amanhecer no Brasil.',
+    observacao: 'BUs afixados nas portas das seções diplomáticas ao amanhecer no Brasil. Contagem finalizada.',
   },
   {
     id: 'KR',
@@ -1323,6 +1338,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~06h00 (manhã)',
     fusoInfo: '+12h em relação a Brasília',
     ordemFechamento: 3,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 126,
       lulaPct: 64.29,
@@ -1341,6 +1361,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~07h00 (manhã)',
     fusoInfo: '+12h em relação a Brasília (Grande comunidade de decasséguis)',
     ordemFechamento: 4,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 2052,
       lulaPct: 16.51,
@@ -1349,7 +1374,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 12427,
       vencedor: 'Bolsonaro',
     },
-    observacao: 'Forte votação conservadora histórica entre brasileiros residentes no Japão.',
+    observacao: 'BUs de Tóquio, Nagoia e Hamamatsu apurados. Maior colégio eleitoral com votação já encerrada no dia.',
   },
   {
     id: 'SG',
@@ -1359,6 +1384,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~08h00 (manhã)',
     fusoInfo: '+11h em relação a Brasília',
     ordemFechamento: 5,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 230,
       lulaPct: 63.71,
@@ -1367,7 +1397,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 361,
       vencedor: 'Lula',
     },
-    observacao: 'Boletim divulgado e circulado localmente no período da manhã brasileira.',
+    observacao: 'Boletim divulgado e circulado localmente após encerramento às 08h de Brasília.',
   },
   {
     id: 'FR',
@@ -1377,6 +1407,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~12h00 (meio-dia)',
     fusoInfo: '+5h em relação a Brasília',
     ordemFechamento: 6,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 7835,
       lulaPct: 82.95,
@@ -1385,7 +1420,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 9446,
       vencedor: 'Lula',
     },
-    observacao: 'Uma das maiores margens percentuais pró-Lula na Europa.',
+    observacao: 'Votação em andamento em Paris. Emissão do BU impresso prevista para as 12h00 de Brasília.',
   },
   {
     id: 'DE',
@@ -1395,6 +1430,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~12h00 (meio-dia)',
     fusoInfo: '+5h em relação a Brasília',
     ordemFechamento: 7,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 13914,
       lulaPct: 76.81,
@@ -1403,7 +1443,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 18115,
       vencedor: 'Lula',
     },
-    observacao: 'Comunidade brasileira expressiva com seções diplomáticas concorridas.',
+    observacao: 'Votação em andamento nas seções diplomáticas. Emissão do BU prevista para as 12h00 de Brasília.',
   },
   {
     id: 'IT',
@@ -1413,6 +1453,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~12h00 (meio-dia)',
     fusoInfo: '+5h em relação a Brasília',
     ordemFechamento: 8,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 7915,
       lulaPct: 41.61,
@@ -1421,7 +1466,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 19024,
       vencedor: 'Bolsonaro',
     },
-    observacao: 'Maioria dos votos apurados na Itália foi para Jair Bolsonaro.',
+    observacao: 'Votação em andamento em Roma e Milão. Emissão do BU prevista para as 12h00 de Brasília.',
   },
   {
     id: 'GB',
@@ -1431,6 +1476,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~13h00 (tarde)',
     fusoInfo: '+4h em relação a Brasília',
     ordemFechamento: 9,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 11237,
       lulaPct: 63.72,
@@ -1439,7 +1489,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 17635,
       vencedor: 'Lula',
     },
-    observacao: 'Londres concentra um dos maiores locais individuais de votação no mundo.',
+    observacao: 'Votação em andamento em Londres. Emissão do BU prevista para as 13h00 de Brasília.',
   },
   {
     id: 'PT',
@@ -1449,6 +1499,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: '~13h00 (tarde)',
     fusoInfo: '+4h em relação a Brasília (Maior colégio eleitoral do exterior)',
     ordemFechamento: 10,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 35626,
       lulaPct: 64.53,
@@ -1457,7 +1512,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 55204,
       vencedor: 'Lula',
     },
-    observacao: 'Mais de 55 mil votos válidos. Lisboa e Porto tiveram longas filas e ampla cobertura.',
+    observacao: 'Votação em andamento em Lisboa e Porto (mais de 100 mil eleitores). Emissão do BU prevista para as 13h00 de Brasília.',
   },
   {
     id: 'US',
@@ -1467,6 +1522,11 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
     fechamentoBrasilia: 'Entre 17h00 e 20h00',
     fusoInfo: '-1h a -4h em relação a Brasília (Fecha junto ou após o Brasil)',
     ordemFechamento: 11,
+    status2026: 'em_votacao',
+    resultado2026: {
+      totalValidos: 0,
+      statusApuracao: 'Aguardando publicação oficial do TSE',
+    },
     resultado2022T2: {
       lulaVotos: 39345,
       lulaPct: 44.21,
@@ -1475,7 +1535,7 @@ export const PAISES_EXTERIOR_BUS: PaisExteriorBU[] = [
       totalValidos: 89003,
       vencedor: 'Bolsonaro',
     },
-    observacao: 'Flórida (Miami/Orlando) votou maciçamente em Bolsonaro; Nova York e Califórnia votaram em Lula.',
+    observacao: 'Votação em andamento em todos os consulados nos EUA. Encerramento previsto entre 17h00 e 20h00 de Brasília.',
   },
 ];
 

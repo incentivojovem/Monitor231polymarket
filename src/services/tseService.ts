@@ -94,7 +94,7 @@ export const CARGOS_TSE: CargoConfig[] = [
 ];
 
 export const ESTADOS_BRASIL: EstadoInfo[] = [
-  { uf: 'ZZ', nome: 'Exterior (Zona Eleitoral ZZ - TRE-DF)', regiao: 'Exterior', capital: 'Embaixadas e Consulados', eleitoradoAprox: 697078 },
+  { uf: 'ZZ', nome: 'Exterior (Zona Eleitoral ZZ - TRE-DF)', regiao: 'Exterior', capital: 'Embaixadas e Consulados', eleitoradoAprox: 918876 },
   { uf: 'AC', nome: 'Acre', regiao: 'Norte', capital: 'Rio Branco', eleitoradoAprox: 600000 },
   { uf: 'AL', nome: 'Alagoas', regiao: 'Nordeste', capital: 'Maceió', eleitoradoAprox: 2300000 },
   { uf: 'AP', nome: 'Amapá', regiao: 'Norte', capital: 'Macapá', eleitoradoAprox: 550000 },
@@ -125,40 +125,152 @@ export const ESTADOS_BRASIL: EstadoInfo[] = [
 ];
 
 /**
- * Converte resposta padrão do TSE (dados-simplificados) para o modelo da aplicação
+ * Converte resposta padrão do TSE (tanto -u.json unificado quanto dados-simplificados -r.json)
+ * para o modelo da aplicação
  */
 export function parseTSERawJson(raw: any, cargo: CargoCodigo, uf: string, ano: EleicaoAno): TSEResultData {
   const cargoInfo = CARGOS_TSE.find((c) => c.codigo === cargo) || CARGOS_TSE[0];
   const estadoInfo = ESTADOS_BRASIL.find((e) => e.uf.toLowerCase() === uf.toLowerCase());
   const ufNome = uf.toLowerCase() === 'br' ? 'Brasil' : estadoInfo?.nome || uf.toUpperCase();
 
-  const totalSecoes = parseInt(raw.s || '0', 10);
-  const secoesTotalizadas = parseInt(raw.st || '0', 10);
-  const pst = parseFloat(raw.pst?.replace(',', '.') || '0');
+  const cargItem = Array.isArray(raw.carg) ? raw.carg[0] : null;
 
-  const vGeral = parseInt(raw.v || '0', 10);
-  const vValidos = parseInt(raw.vv || '0', 10);
-  const pvv = parseFloat(raw.pvv?.replace(',', '.') || '0');
-  const vBrancos = parseInt(raw.vb || '0', 10);
-  const pvb = parseFloat(raw.pvb?.replace(',', '.') || '0');
-  const vNulos = parseInt(raw.tvn || '0', 10);
-  const ptvn = parseFloat(raw.ptvn?.replace(',', '.') || '0');
-  const vAbstencao = parseInt(raw.a || '0', 10);
-  const pa = parseFloat(raw.pa?.replace(',', '.') || '0');
+  // 1. Seções eleitorais (suporta objeto do -u.json ou campos diretos do -r.json)
+  const isSObj = typeof raw.s === 'object' && raw.s !== null;
+  const isCargSObj = typeof cargItem?.s === 'object' && cargItem?.s !== null;
 
-  const candidatos = (raw.cand || []).map((c: any, index: number) => {
+  const totalSecoes = parseInt(
+    (isSObj ? raw.s.ts || raw.s.s : raw.s) ||
+    (isCargSObj ? cargItem?.s.ts || cargItem?.s.s : cargItem?.s) ||
+    '0',
+    10
+  );
+
+  const secoesTotalizadas = parseInt(
+    (isSObj ? raw.s.st : raw.st) ||
+    (isCargSObj ? cargItem?.s.st : cargItem?.st) ||
+    '0',
+    10
+  );
+
+  const pstRaw =
+    (isSObj ? raw.s.pst : raw.pst) ||
+    (isCargSObj ? cargItem?.s.pst : cargItem?.pst) ||
+    '0';
+  const pst = parseFloat(String(pstRaw).replace(',', '.'));
+
+  // 2. Votos apurados (suporta objeto v do -u.json ou campos planos do -r.json)
+  const isVObj = typeof raw.v === 'object' && raw.v !== null;
+  const isCargVObj = typeof cargItem?.v === 'object' && cargItem?.v !== null;
+
+  const vGeral = parseInt(
+    (isVObj ? raw.v.tv || raw.v.v : raw.v) ||
+    (isCargVObj ? cargItem?.v.tv || cargItem?.v.v : cargItem?.v) ||
+    '0',
+    10
+  );
+
+  const vValidos = parseInt(
+    (isVObj ? raw.v.vv || raw.v.vvc : raw.vv) ||
+    (isCargVObj ? cargItem?.v.vv || cargItem?.v.vvc : cargItem?.vv) ||
+    '0',
+    10
+  );
+
+  const pvvRaw =
+    (isVObj ? raw.v.pvvc || raw.v.pvv : raw.pvv) ||
+    (isCargVObj ? cargItem?.v.pvvc || cargItem?.v.pvv : cargItem?.pvv) ||
+    '0';
+  const pvv = parseFloat(String(pvvRaw).replace(',', '.'));
+
+  const vBrancos = parseInt(
+    (isVObj ? raw.v.vb : raw.vb) ||
+    (isCargVObj ? cargItem?.v.vb : cargItem?.vb) ||
+    '0',
+    10
+  );
+
+  const pvbRaw =
+    (isVObj ? raw.v.pvb : raw.pvb) ||
+    (isCargVObj ? cargItem?.v.pvb : cargItem?.pvb) ||
+    '0';
+  const pvb = parseFloat(String(pvbRaw).replace(',', '.'));
+
+  const vNulos = parseInt(
+    (isVObj ? raw.v.tvn || raw.v.vn : raw.tvn) ||
+    (isCargVObj ? cargItem?.v.tvn || cargItem?.v.vn : cargItem?.tvn) ||
+    '0',
+    10
+  );
+
+  const ptvnRaw =
+    (isVObj ? raw.v.ptvn : raw.ptvn) ||
+    (isCargVObj ? cargItem?.v.ptvn : cargItem?.ptvn) ||
+    '0';
+  const ptvn = parseFloat(String(ptvnRaw).replace(',', '.'));
+
+  // 3. Eleitorado e abstenção (objeto raw.e no -u.json)
+  const isEObj = typeof raw.e === 'object' && raw.e !== null;
+  const vAbstencao = parseInt(
+    (isEObj ? raw.e.a : raw.a) ||
+    cargItem?.a ||
+    '0',
+    10
+  );
+
+  const paRaw =
+    (isEObj ? raw.e.pa : raw.pa) ||
+    cargItem?.pa ||
+    '0';
+  const pa = parseFloat(String(paRaw).replace(',', '.'));
+
+  // 4. Candidatos (suporta tanto a árvore de agregação/partido do -u.json quanto o array plano do -r.json)
+  const rawCands: any[] = [];
+  if (Array.isArray(raw.cand) && raw.cand.length > 0) {
+    rawCands.push(...raw.cand);
+  } else if (cargItem && Array.isArray(cargItem.cand) && cargItem.cand.length > 0) {
+    rawCands.push(...cargItem.cand);
+  } else if (cargItem && Array.isArray(cargItem.agr)) {
+    for (const agr of cargItem.agr) {
+      if (Array.isArray(agr.par)) {
+        for (const par of agr.par) {
+          if (Array.isArray(par.cand)) {
+            for (const c of par.cand) {
+              const vice = c.vs && c.vs[0] ? (c.vs[0].nmu || c.vs[0].nm) : '';
+              rawCands.push({
+                ...c,
+                n: c.n || '',
+                nm: c.nmu || c.nm || 'Candidato',
+                nmCompleto: c.nm || c.nmu || 'Candidato',
+                cc: c.cc || agr.nm || par.sg || '',
+                sg: par.sg,
+                nv: vice || c.nv || '',
+                e: c.e === 's' || c.e === 'S' ? 'S' : 'N',
+                st: c.st || (c.e === 's' || c.e === 'S' ? 'Eleito' : 'Em apuração'),
+                vap: c.vap,
+                pvap: c.pvap,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const candidatos = rawCands.map((c: any, index: number) => {
     const vap = parseInt(c.vap || '0', 10);
-    const pvap = parseFloat(c.pvap?.replace(',', '.') || '0');
+    const pvap = parseFloat(String(c.pvap || '0').replace(',', '.'));
+    const eleitoStatus: 'S' | 'N' = c.e === 'S' || c.e === 's' ? 'S' : 'N';
     return {
       seq: c.seq || String(index + 1),
       sqcand: c.sqcand || String(index + 100),
       n: c.n || '',
-      nm: c.nm || 'Candidato',
-      nmCompleto: c.nmc || c.nm || 'Candidato',
+      nm: c.nm || c.nmu || 'Candidato',
+      nmCompleto: c.nmCompleto || c.nmc || c.nm || 'Candidato',
       cc: c.cc || '',
       nv: c.nv || '',
-      e: c.e === 'S' ? 'S' : 'N',
-      st: c.st || (c.e === 'S' ? 'Eleito' : 'Em apuração'),
+      e: eleitoStatus,
+      st: c.st || (eleitoStatus === 'S' ? 'Eleito' : 'Em apuração'),
       dvt: c.dvt || 'Válido',
       vap,
       pvap,
@@ -166,7 +278,10 @@ export function parseTSERawJson(raw: any, cargo: CargoCodigo, uf: string, ano: E
     };
   });
 
-  const temDados = pst > 0 && vValidos > 0 && candidatos.length > 0;
+  // Ordena os candidatos por número de votos válidos (decrescente)
+  candidatos.sort((a, b) => b.vap - a.vap);
+
+  const temDados = pst > 0 && candidatos.length > 0;
 
   let statusApuracao: 'aguardando' | 'em_andamento' | 'finalizada' = 'em_andamento';
   if (pst >= 100) statusApuracao = 'finalizada';
@@ -174,7 +289,7 @@ export function parseTSERawJson(raw: any, cargo: CargoCodigo, uf: string, ano: E
 
   return {
     ano,
-    ele: raw.ele || '6257',
+    ele: raw.ele || '',
     tpabr: raw.tpabr || (uf.toLowerCase() === 'br' ? 'BR' : 'UF'),
     cdabr: (raw.cdabr || uf).toUpperCase(),
     ufNome,
@@ -182,8 +297,8 @@ export function parseTSERawJson(raw: any, cargo: CargoCodigo, uf: string, ano: E
     cargoNome: cargoInfo.nome,
     t: raw.t || '1',
     espe: raw.espe || 'N',
-    hg: raw.hg || new Date().toLocaleTimeString('pt-BR'),
-    dt: raw.dt || new Date().toLocaleDateString('pt-BR'),
+    hg: raw.hg || '--:--:--',
+    dt: raw.dt || '--/--/----',
     pst,
     s: totalSecoes,
     st: secoesTotalizadas,
@@ -217,7 +332,7 @@ export function getEmptyTSEState(ano: EleicaoAno, cargo: CargoCodigo, ufInput: s
 
   return {
     ano,
-    ele: cargo === '1' ? '6257' : '6259',
+    ele: '',
     tpabr: uf === 'BR' ? 'BR' : uf === 'ZZ' ? 'ZZ' : 'UF',
     cdabr: uf,
     ufNome,
@@ -226,9 +341,9 @@ export function getEmptyTSEState(ano: EleicaoAno, cargo: CargoCodigo, ufInput: s
     t: '1',
     espe: 'N',
     hg: '--:--:--',
-    dt: '04/10/2026',
+    dt: '--/--/----',
     pst: 0,
-    s: uf === 'BR' ? 472075 : isExterior ? 1018 : (estadoInfo ? Math.round(estadoInfo.eleitoradoAprox / 330) : 0),
+    s: 0,
     st: 0,
     v: 0,
     vv: 0,
@@ -263,53 +378,62 @@ export async function fetchTSEApuracao(
 ): Promise<TSEResultData> {
   const uf = ufInput ? ufInput.toUpperCase() : (cargo === '1' ? 'BR' : 'SP');
 
-  // 1. Dados Históricos Reais (2022 e 2024)
+  // Dados históricos permanecem somente para eleições encerradas.
   if (ano === '2022' || ano === '2024') {
     const chave = `${ano}_${turno}_${uf}_${cargo}`;
-    if (TSE_HISTORICAL_RESULTS[chave]) {
-      return TSE_HISTORICAL_RESULTS[chave];
-    }
+    if (TSE_HISTORICAL_RESULTS[chave]) return TSE_HISTORICAL_RESULTS[chave];
 
-    // Se pedir 2º turno e não tiver para essa UF/cargo, tenta 1º turno
     const chaveFallbackTurno = `${ano}_1_${uf}_${cargo}`;
-    if (TSE_HISTORICAL_RESULTS[chaveFallbackTurno]) {
-      return TSE_HISTORICAL_RESULTS[chaveFallbackTurno];
-    }
+    if (TSE_HISTORICAL_RESULTS[chaveFallbackTurno]) return TSE_HISTORICAL_RESULTS[chaveFallbackTurno];
 
-    // Se for ZZ mas não encontrou fallback especial, tenta 1º turno de ZZ
     if (uf === 'ZZ') {
       return TSE_HISTORICAL_RESULTS['2022_2_ZZ_1'] || TSE_HISTORICAL_RESULTS['2022_1_ZZ_1'];
     }
 
-    // Fallback para Presidente (se 2022) ou Prefeito SP (se 2024)
     if (ano === '2022') {
       return TSE_HISTORICAL_RESULTS[`2022_${turno}_BR_1`] || TSE_HISTORICAL_RESULTS['2022_1_BR_1'];
-    } else {
-      return TSE_HISTORICAL_RESULTS[`2024_${turno}_SP_11`] || TSE_HISTORICAL_RESULTS['2024_2_SP_11'];
     }
+    return TSE_HISTORICAL_RESULTS[`2024_${turno}_SP_11`] || TSE_HISTORICAL_RESULTS['2024_2_SP_11'];
   }
 
-  // 2. Eleição Atual (2026): Conecta ao feed oficial em tempo real
+  // 2026 NUNCA usa dados históricos/fixos. A única fonte é o feed oficial do TSE.
   try {
-    const url = `/api/tse/apuracao?cargo=${cargo}&uf=${uf.toLowerCase()}`;
+    const url = `/api/tse/apuracao?cargo=${encodeURIComponent(cargo)}&uf=${encodeURIComponent(uf.toLowerCase())}&turno=${turno}`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
 
     if (res.ok) {
       const json = await res.json();
       if (json.sucesso && json.dados) {
-        const parsed = parseTSERawJson(json.dados, cargo, uf, '2026');
-        if (parsed.temDadosSuficientes) {
-          return parsed;
-        }
+        // Um JSON oficial existente é válido mesmo que ainda tenha 0 votos.
+        return parseTSERawJson(json.dados, cargo, uf, '2026');
       }
     }
   } catch (err) {
-    console.warn('API TSE ao vivo ainda não respondeu com dados totalizados:', err);
+    console.warn('Falha ao consultar o feed oficial TSE 2026:', err);
   }
 
-  // Se for a eleição de 2026 e o TSE ainda não tiver dados suficientes:
-  // RETORNA EM BRANCO (SEM NÚMEROS FICTÍCIOS)
+  // Sem feed oficial: estado vazio, sem números inventados e sem fallback de 2026.
   return getEmptyTSEState('2026', cargo, uf);
+}
+
+/**
+ * Consulta resultados dos países no exterior (Zona ZZ) apurados oficialmente pelo TSE
+ */
+export async function fetchTSEExteriorPaises(turno: '1' | '2' = '1') {
+  try {
+    const res = await fetch(`/api/tse/exterior/paises?turno=${turno}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.sucesso && Array.isArray(json.paises)) {
+        return json.paises;
+      }
+    }
+  } catch (err) {
+    console.warn('Falha ao consultar países do exterior:', err);
+  }
+  return [];
 }
 
 /**

@@ -299,48 +299,240 @@ app.get('/api/polymarket/export-csv', async (_req, res) => {
   }
 });
 
-// Proxy endpoint for official TSE Vote Counting (Resultados TSE)
+// Proxy endpoint for official TSE Vote Counting (Resultados TSE) - Eleições 2026
+// Usa exclusivamente os arquivos oficiais de divulgação do TSE. Nenhum resultado 2026 é inventado/local.
 app.get('/api/tse/apuracao', async (req, res) => {
   const cargo = ((req.query.cargo as string) || '1').trim();
   const uf = ((req.query.uf as string) || (cargo === '1' ? 'br' : 'sp')).toLowerCase().trim();
+  const turno = ((req.query.turno as string) || '1').trim() === '2' ? '2' : '1';
   const modo = (req.query.modo as string) || 'auto';
 
-  // TSE election code for 2026: 6257 (Federal/Presidente) or 6259 (Estadual)
-  const eleicao = cargo === '1' ? '6257' : '6259';
   const cargoPadded = cargo.padStart(4, '0');
-  const cacheKey = `tse_${eleicao}_${uf}_${cargo}`;
-  const cached = getCached(cacheKey);
-
-  if (cached && modo !== 'live_force') {
-    return res.json({ sucesso: true, fonte: 'cache', dados: cached });
-  }
-
-  // Official TSE CDN URL pattern
-  const tseUrl = `https://resultados.tse.jus.br/oficial/ele2026/${eleicao}/dados-simplificados/${uf}/${uf}-c${cargoPadded}-e00${eleicao}-r.json`;
+  const base = 'https://resultados.tse.jus.br';
+  const configUrls = [
+    `${base}/oficial/comum/config/ele-c.json`,
+    `${base}/oficial/ele2026/comum/config/ele-c.json`,
+  ];
 
   try {
-    const tseResponse = await fetch(tseUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MonitorEleitoralBR/1.0',
-        Accept: 'application/json',
-      },
-    });
+    // 1. Descobrir código oficial no EA11 (ele-c.json)
+    const configCacheKey = 'tse_2026_ele_c_config';
+    let config = getCached(configCacheKey);
 
-    if (tseResponse.ok) {
-      const rawData = await tseResponse.json();
-      setCached(cacheKey, rawData, 15); // Cache for 15s
-      return res.json({ sucesso: true, fonte: 'tse_live', url: tseUrl, dados: rawData });
+    if (!config || modo === 'live_force') {
+      for (const cfgUrl of configUrls) {
+        try {
+          const configResponse = await fetch(cfgUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 MonitorEleitoralBR/2.0',
+              Accept: 'application/json',
+            },
+          });
+
+          if (configResponse.ok) {
+            config = await configResponse.json();
+            setCached(configCacheKey, config, 60); // Cache do arquivo de config por 60s
+            break;
+          }
+        } catch (err: any) {
+          console.warn(`[TSE Proxy] Falha ao consultar ${cfgUrl}:`, err.message);
+        }
+      }
     }
+
+    let eleicao = '';
+    if (config) {
+      const elections: any[] = [];
+      const walk = (value: any) => {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value)) {
+          value.forEach(walk);
+          return;
+        }
+        if (value.cd && value.nm && value.t && (value.cdt2 !== undefined || value.sqele)) {
+          elections.push(value);
+        }
+        Object.values(value).forEach(walk);
+      };
+      walk(config);
+
+      const federal = elections.find((e) => /Eleição (Geral|Ordinária) Federal/i.test(String(e.nm)) && String(e.t) === '1');
+      const estadual = elections.find((e) => /Eleição (Geral|Ordinária) Estadual/i.test(String(e.nm)) && String(e.t) === '1');
+      const baseElection = cargo === '1' ? federal : estadual;
+      eleicao = turno === '2' ? String(baseElection?.cdt2 || '') : String(baseElection?.cd || '');
+    }
+
+    // Se a consulta da configuração falhar ou o código não for encontrado, usa a convenção oficial 2026 do TSE
+    if (!eleicao) {
+      eleicao = cargo === '1' ? (turno === '2' ? '6258' : '6257') : (turno === '2' ? '6260' : '6259');
+    }
+
+    const cacheKey = `tse_2026_${eleicao}_${uf}_${cargo}_${turno}`;
+    const cached = getCached(cacheKey);
+    if (cached && modo !== 'live_force') {
+      return res.json({ sucesso: true, fonte: 'cache', eleicao, turno, dados: cached });
+    }
+
+    // 2. URLs candidatas oficiais do TSE (priorizando -u.json unificado de acordo com EA20)
+    const urlsToTry = [
+      `${base}/oficial/ele2026/${eleicao}/dados/${uf}/${uf}-c${cargoPadded}-e00${eleicao}-u.json`,
+      `${base}/oficial/ele2026/${eleicao}/dados/${uf}/${uf}-c${cargoPadded}-e${eleicao}-u.json`,
+      `${base}/oficial/ele2026/${eleicao}/dados-simplificados/${uf}/${uf}-c${cargoPadded}-e00${eleicao}-r.json`,
+    ];
+
+    let rawData: any = null;
+    let successfulUrl = '';
+
+    for (const url of urlsToTry) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 MonitorEleitoralBR/2.0',
+            Accept: 'application/json',
+          },
+        });
+        if (response.ok) {
+          rawData = await response.json();
+          successfulUrl = url;
+          break;
+        }
+      } catch {
+        // Tenta próxima URL candidata
+      }
+    }
+
+    if (rawData) {
+      setCached(cacheKey, rawData, 15); // Cache oficial de 15 segundos
+      return res.json({
+        sucesso: true,
+        status: 'available',
+        fonte: 'tse_live',
+        eleicao,
+        turno,
+        url: successfulUrl,
+        dados: rawData,
+      });
+    }
+
+    return res.json({
+      sucesso: false,
+      status: 'unavailable',
+      motivo: 'aguardando_apuracao_tse',
+      mensagem: 'O arquivo oficial de totalização do TSE ainda não foi disponibilizado para esta abrangência. O painel permanecerá sem números fictícios.',
+      eleicao,
+      turno,
+      url: urlsToTry[0],
+    });
   } catch (error: any) {
-    console.warn(`[TSE Proxy] Falha ao consultar TSE em ${tseUrl}:`, error.message);
+    console.warn('[TSE Proxy] Falha ao consultar divulgação oficial:', error.message);
+    return res.json({
+      sucesso: false,
+      status: 'unavailable',
+      motivo: 'tse_indisponivel',
+      mensagem: 'Dados oficiais temporariamente indisponíveis. Tentaremos novamente automaticamente.',
+      configUrl: configUrls[0],
+    });
+  }
+});
+
+// Proxy endpoint para apuração oficial dos países na Zona ZZ (Exterior) - Eleições 2026
+app.get('/api/tse/exterior/paises', async (req, res) => {
+  const turno = ((req.query.turno as string) || '1').trim() === '2' ? '2' : '1';
+  const eleicao = turno === '2' ? '6258' : '6257';
+  const cacheKey = `tse_2026_exterior_paises_${turno}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    return res.json({ sucesso: true, fonte: 'cache', paises: cached });
   }
 
-  return res.json({
-    sucesso: false,
-    motivo: 'aguardando_apuracao_tse',
-    mensagem: 'A transmissão oficial do TSE para esta eleição ainda não foi iniciada ou o arquivo está sendo gerado pela Justiça Eleitoral.',
-    url: tseUrl,
-  });
+  const base = 'https://resultados.tse.jus.br';
+  // Mapeamento oficial dos postos/municípios eleitorais do exterior aos países monitorados
+  const paisesConfig: { id: string; pais: string; munCodes: string[] }[] = [
+    { id: 'NZ', pais: 'Nova Zelândia', munCodes: ['30805'] }, // Wellington
+    { id: 'AU', pais: 'Austrália', munCodes: ['30562', '29491'] }, // Sydney, Camberra
+    { id: 'KR', pais: 'Coreia do Sul', munCodes: ['30538'] }, // Seul
+    { id: 'SG', pais: 'Singapura', munCodes: ['29548'] }, // Singapura
+    { id: 'JP', pais: 'Japão', munCodes: ['30627', '30198', '29742'] }, // Tóquio, Nagóia, Hamamatsu
+    { id: 'FR', pais: 'França', munCodes: ['30287'] }, // Paris
+    { id: 'DE', pais: 'Alemanha', munCodes: ['29386', '29696', '30180'] }, // Berlim, Frankfurt, Munique
+    { id: 'GB', pais: 'Reino Unido', munCodes: ['29971'] }, // Londres
+    { id: 'IT', pais: 'Itália', munCodes: ['30449', '30120'] }, // Roma, Milão
+    { id: 'PT', pais: 'Portugal', munCodes: ['29955', '30341', '30961'] }, // Lisboa, Porto, Faro
+    { id: 'US', pais: 'Estados Unidos', munCodes: ['30112', '30228', '29416', '99490'] }, // Miami, NY, Boston, Orlando
+  ];
+
+  try {
+    const fetchMun = async (mun: string) => {
+      const url = `${base}/oficial/ele2026/${eleicao}/dados/zz/zz${mun}-c0001-e00${eleicao}-u.json`;
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 MonitorEleitoralBR/2.0' } });
+      if (!r.ok) return null;
+      return r.json();
+    };
+
+    const results = await Promise.all(
+      paisesConfig.map(async (pc) => {
+        const munDataList = (await Promise.all(pc.munCodes.map(fetchMun))).filter(Boolean);
+        if (munDataList.length === 0) {
+          return {
+            id: pc.id,
+            pais: pc.pais,
+            totalValidos: 0,
+            statusApuracao: 'Aguardando publicação oficial do TSE',
+            candidatos: [],
+          };
+        }
+
+        let totalValidos = 0;
+        const candVotes: Record<string, { n: string; nm: string; nmCompleto: string; cc: string; vap: number }> = {};
+
+        for (const data of munDataList) {
+          const vv = parseInt(data.v?.vv || '0', 10);
+          totalValidos += vv;
+
+          data.carg?.[0]?.agr?.forEach((agr: any) => {
+            agr.par?.forEach((par: any) => {
+              par.cand?.forEach((c: any) => {
+                const key = c.n;
+                const vap = parseInt(c.vap || '0', 10);
+                if (!candVotes[key]) {
+                  candVotes[key] = {
+                    n: c.n,
+                    nm: c.nmu || c.nm,
+                    nmCompleto: c.nm,
+                    cc: agr.nm || par.sg || '',
+                    vap: 0,
+                  };
+                }
+                candVotes[key].vap += vap;
+              });
+            });
+          });
+        }
+
+        const sortedCands = Object.values(candVotes)
+          .map((c) => ({
+            ...c,
+            pvap: totalValidos > 0 ? (c.vap / totalValidos) * 100 : 0,
+          }))
+          .sort((a, b) => b.vap - a.vap);
+
+        return {
+          id: pc.id,
+          pais: pc.pais,
+          totalValidos,
+          statusApuracao: totalValidos > 0 ? 'Totalizado' : 'Aguardando publicação oficial do TSE',
+          candidatos: sortedCands,
+          vencedor: sortedCands[0]?.nm || '',
+        };
+      })
+    );
+
+    setCached(cacheKey, results, 60); // Cache por 60 segundos
+    return res.json({ sucesso: true, fonte: 'tse_live', paises: results });
+  } catch (err: any) {
+    console.warn('[TSE Proxy] Falha ao consultar países do exterior:', err.message);
+    return res.status(500).json({ sucesso: false, erro: err.message });
+  }
 });
 
 // Vite or Static Serving
